@@ -1,4 +1,4 @@
-package queuety
+package server
 
 import (
 	"bytes"
