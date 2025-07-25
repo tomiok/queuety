@@ -12,15 +12,20 @@ func main() {
 		panic(err)
 	}
 
-	var i int
+	topic, err := conn.NewTopic("hello-1")
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(conn.Subscribe(topic))
+	go conn.Consume(topic)
+
 	for {
-		i = i + 10
-		err = conn.NewTopic(fmt.Sprintf("hello %d", i))
+		err = conn.Publish(topic, `hola`)
 		if err != nil {
 			panic(err)
 		}
 
-		i++
-		time.Sleep(5 * time.Second)
+		time.Sleep(time.Second * 5)
 	}
 }

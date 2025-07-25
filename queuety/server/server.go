@@ -14,10 +14,9 @@ type Server struct {
 	port     string
 	format   string
 
-	publishers []Publisher
-	consumers  []Consumer
+	clients map[Topic][]net.Conn
 
-	Topics map[string]struct{}
+	Topics map[Topic]struct{}
 }
 
 type Publisher struct {
@@ -30,8 +29,9 @@ func NewServer(protocol, port string) *Server {
 	return &Server{
 		protocol: protocol,
 		port:     port,
-		format:   "JSON",
-		Topics:   make(map[string]struct{}),
+		format:   string(MessageFormatJSON),
+		Topics:   make(map[Topic]struct{}),
+		clients:  make(map[Topic][]net.Conn),
 	}
 }
 
@@ -51,7 +51,6 @@ func (s *Server) Start() error {
 
 		go s.handleConnections(conn)
 	}
-
 }
 
 func (s *Server) handleConnections(conn net.Conn) {
@@ -69,29 +68,57 @@ func (s *Server) handleConnections(conn net.Conn) {
 		}
 
 		switch s.format {
-		case "JSON":
-			s.handleJSON(buff[:i])
+		case string(MessageFormatJSON):
+			s.handleJSON(conn, buff[:i])
 		}
 	}
 
 }
 
-func (s *Server) handleJSON(buff []byte) {
-	var v = make(map[string]any)
+func (s *Server) handleJSON(conn net.Conn, buff []byte) {
+	var v = Message{}
 	err := json.NewDecoder(bytes.NewReader(buff)).Decode(&v)
 	if err != nil {
 		log.Printf("cannot parse message %v \n", err)
 	}
 	log.Println(v)
-	_type := v["type"]
-	switch _type {
-	case "NEW_TOPIC":
-		s.addNewTopic(v["name"].(string))
+	switch v.Type {
+	case MessageTypeNewTopic:
+		s.addNewTopic(v.Topic.Name)
+	case MessageTypeNew:
+		s.newMessage(v)
+	case MessageTypeNewSubscriber:
+		s.addNewSubscriber(conn, v.Topic)
 	}
+}
 
-	log.Println(s.Topics)
+func (s *Server) addNewSubscriber(conn net.Conn, topic Topic) {
+	s.clients[topic] = append(s.clients[topic], conn)
 }
 
 func (s *Server) addNewTopic(name string) {
-	s.Topics[name] = struct{}{}
+	s.Topics[NewTopic(name)] = struct{}{}
+}
+
+func (s *Server) newMessage(v Message) {
+	clients := s.clients[v.Topic]
+	if len(clients) == 0 {
+		log.Printf("topic not found \n actual name: %s, values in memory: %v", v.Topic.Name, s.clients)
+		return
+	}
+
+	// write for all the clients/connections
+	for _, conn := range clients {
+		b, err := v.Marshall()
+		if err != nil {
+			log.Printf("cannot marshall message: %v\n", err)
+			return
+		}
+
+		_, err = conn.Write(b)
+		if err != nil {
+			log.Printf("cannot marshall message: %v\n", err)
+			return
+		}
+	}
 }

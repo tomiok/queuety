@@ -2,20 +2,15 @@ package manager
 
 import (
 	"encoding/json"
+	"fmt"
+	"github.com/tomiok/queuety/queuety/server"
+	"log"
 	"net"
-)
-
-const (
-	messageTypeNewTopic = "NEW_TOPIC"
+	"time"
 )
 
 type QConn struct {
 	c net.Conn
-}
-
-type Message struct {
-	Type string `json:"type"`
-	Name string `json:"name"`
 }
 
 func Connect(protocol, addr string) (*QConn, error) {
@@ -31,39 +26,86 @@ func Connect(protocol, addr string) (*QConn, error) {
 	return &qConn, nil
 }
 
-func (q *QConn) NewTopic(name string) error {
-	err := q.qWrite(messageTypeNewTopic, name, nil)
+func (q *QConn) NewTopic(name string) (server.Topic, error) {
+	m := server.Message{
+		Type:      server.MessageTypeNewTopic,
+		Topic:     server.NewTopic(name),
+		Timestamp: time.Now().UnixMilli(),
+		ACK:       false,
+	}
+	err := q.qWrite(m)
 	if err != nil {
-		return err
+		return server.Topic{}, err
 	}
 
-	return nil
-}
-
-func (q *QConn) qWrite(s, topicName string, b []byte) error {
-	switch s {
-	case messageTypeNewTopic:
-		return q.writeNewTopic(topicName)
-	}
-
-	return nil
-}
-
-func (q *QConn) writeNewTopic(name string) error {
-	msg := Message{
-		Type: messageTypeNewTopic,
+	return server.Topic{
 		Name: name,
+	}, nil
+}
+
+func (q *QConn) Publish(t server.Topic, msg string) error {
+	m := server.Message{
+		Type:      server.MessageTypeNew,
+		Topic:     t,
+		Body:      []byte(msg),
+		Timestamp: time.Now().Unix(),
+		ACK:       false,
 	}
 
-	b, err := json.Marshal(msg)
+	return q.qWrite(m)
+}
+
+func (q *QConn) Consume(t server.Topic) <-chan server.Message {
+	go func() {
+		for {
+			b := make([]byte, 1024)
+			i, err := q.c.Read(b)
+			if err != nil {
+				panic(err)
+			}
+
+			if len(b) > 0 {
+				fmt.Println("got a message")
+				fmt.Println(string(b[:i]))
+			}
+		}
+	}()
+
+	return nil
+}
+
+func (q *QConn) Subscribe(t server.Topic) error {
+	m := server.Message{
+		Type:      server.MessageTypeNewSubscriber,
+		Topic:     t,
+		Timestamp: time.Now().UnixMilli(),
+		ACK:       false,
+	}
+	log.Printf("sending sub\n")
+	return q.qWrite(m)
+}
+
+func (q *QConn) qWrite(m server.Message) error {
+	return q.writeMessage(m)
+}
+
+func (q *QConn) writeMessage(m server.Message) error {
+	b, err := m.Marshall()
 	if err != nil {
 		return err
 	}
 
 	_, err = q.c.Write(b)
+	return err
+
+}
+
+func GetMessage(b []byte) (server.Message, error) {
+	var msg = server.Message{}
+	err := json.Unmarshal(b, &msg)
 	if err != nil {
-		return err
+		return server.Message{}, err
 	}
 
-	return nil
+	return msg, nil
 }

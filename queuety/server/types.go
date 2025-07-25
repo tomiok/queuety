@@ -1,0 +1,44 @@
+package server
+
+import (
+	"encoding/json"
+	"fmt"
+)
+
+type MType string
+
+const (
+	MessageTypeNewTopic      MType = "NEW_TOPIC"
+	MessageTypeNew           MType = "NEW_MESSAGE"
+	MessageTypeNewSubscriber MType = "NEW_SUB"
+
+	MessageFormatJSON MType = "JSON"
+)
+
+type Topic struct {
+	Name string
+}
+
+func NewTopic(name string) Topic {
+	return Topic{Name: name}
+}
+
+func (t Topic) IsEmpty() bool {
+	return t.Name == ""
+}
+
+type Message struct {
+	Type      MType  `json:"type"`
+	Topic     Topic  `json:"topic"`
+	Body      []byte `json:"body"`
+	Timestamp int64  `json:"timestamp"`
+	ACK       bool   `json:"ack"`
+}
+
+func (m Message) Marshall() ([]byte, error) {
+	return json.Marshal(m)
+}
+
+func (m Message) String() string {
+	return fmt.Sprintf("Message %s, %s, %s at %d", m.Type, m.Topic, m.Body, m.Timestamp)
+}
