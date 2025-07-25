@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"github.com/tomiok/queuety/queuety/manager"
 	"time"
 )
@@ -17,7 +16,6 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Println(conn.Subscribe(topic))
 	go conn.Consume(topic)
 
 	for {

@@ -56,6 +56,11 @@ func (q *QConn) Publish(t server.Topic, msg string) error {
 }
 
 func (q *QConn) Consume(t server.Topic) <-chan server.Message {
+	if err := q.Subscribe(t); err != nil {
+		log.Printf("cannot sub %v\n", err)
+		return nil
+	}
+
 	go func() {
 		for {
 			b := make([]byte, 1024)
