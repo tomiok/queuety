@@ -2,7 +2,6 @@ package manager
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/tomiok/queuety/queuety/server"
 	"log"
 	"net"
@@ -73,6 +72,7 @@ func (q *QConn) Consume(t server.Topic) <-chan server.Message {
 		return nil
 	}
 
+	ch := make(chan server.Message, 1000)
 	go func() {
 		for {
 			b := make([]byte, 1024)
@@ -82,13 +82,18 @@ func (q *QConn) Consume(t server.Topic) <-chan server.Message {
 			}
 
 			if len(b) > 0 {
-				fmt.Println("got a message")
-				fmt.Println(GetMessage(b[:n]))
+				msg, err := GetMessage(b[:n])
+				if err != nil {
+					log.Printf("cannot get messege %v \n", err)
+					continue
+				}
+
+				ch <- msg
 			}
 		}
 	}()
 
-	return nil
+	return ch
 }
 
 func (q *QConn) Subscribe(t server.Topic) error {

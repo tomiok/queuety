@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/tomiok/queuety/queuety/manager"
 	"time"
 )
@@ -16,7 +17,12 @@ func main() {
 		panic(err)
 	}
 
-	conn.Consume(topic)
+	go func() {
+		for v := range conn.Consume(topic) {
+			fmt.Println(v)
+		}
+	}()
+
 	time.Sleep(1 * time.Second)
 	for {
 		err = conn.PublishJSON(topic, `{"message": "hello"}`)
