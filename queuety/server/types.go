@@ -28,11 +28,12 @@ func (t Topic) IsEmpty() bool {
 }
 
 type Message struct {
-	Type      MType  `json:"type"`
-	Topic     Topic  `json:"topic"`
-	Body      []byte `json:"body"`
-	Timestamp int64  `json:"timestamp"`
-	ACK       bool   `json:"ack"`
+	Type       MType           `json:"type"`
+	Topic      Topic           `json:"topic"`
+	Body       json.RawMessage `json:"body"`
+	BodyString string          `json:"body_string"`
+	Timestamp  int64           `json:"timestamp"`
+	ACK        bool            `json:"ack"`
 }
 
 func (m Message) Marshall() ([]byte, error) {

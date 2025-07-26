@@ -47,7 +47,19 @@ func (q *QConn) Publish(t server.Topic, msg string) error {
 	m := server.Message{
 		Type:      server.MessageTypeNew,
 		Topic:     t,
-		Body:      []byte(msg),
+		Body:      json.RawMessage(msg),
+		Timestamp: time.Now().Unix(),
+		ACK:       false,
+	}
+
+	return q.qWrite(m)
+}
+
+func (q *QConn) PublishJSON(t server.Topic, msg string) error {
+	m := server.Message{
+		Type:      server.MessageTypeNew,
+		Topic:     t,
+		Body:      json.RawMessage(msg),
 		Timestamp: time.Now().Unix(),
 		ACK:       false,
 	}
@@ -64,14 +76,14 @@ func (q *QConn) Consume(t server.Topic) <-chan server.Message {
 	go func() {
 		for {
 			b := make([]byte, 1024)
-			i, err := q.c.Read(b)
+			n, err := q.c.Read(b)
 			if err != nil {
 				panic(err)
 			}
 
 			if len(b) > 0 {
 				fmt.Println("got a message")
-				fmt.Println(string(b[:i]))
+				fmt.Println(GetMessage(b[:n]))
 			}
 		}
 	}()

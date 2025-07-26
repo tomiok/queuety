@@ -16,10 +16,10 @@ func main() {
 		panic(err)
 	}
 
-	go conn.Consume(topic)
-
+	conn.Consume(topic)
+	time.Sleep(1 * time.Second)
 	for {
-		err = conn.Publish(topic, `hola`)
+		err = conn.PublishJSON(topic, `{"message": "hello"}`)
 		if err != nil {
 			panic(err)
 		}
