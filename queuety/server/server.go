@@ -2,8 +2,11 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/dgraph-io/badger/v4"
 	"io"
 	"log"
 	"net"
@@ -17,6 +20,7 @@ type Server struct {
 	clients map[Topic][]net.Conn
 
 	Topics map[Topic]struct{}
+	DB     BadgerDB
 }
 
 type Publisher struct {
@@ -25,14 +29,20 @@ type Publisher struct {
 type Consumer struct {
 }
 
-func NewServer(protocol, port string) *Server {
+func NewServer(protocol, port string) (*Server, error) {
+	badger, err := NewBadger()
+	if err != nil {
+		return nil, err
+	}
+
 	return &Server{
 		protocol: protocol,
 		port:     port,
 		format:   string(MessageFormatJSON),
 		Topics:   make(map[Topic]struct{}),
 		clients:  make(map[Topic][]net.Conn),
-	}
+		DB:       BadgerDB{DB: badger},
+	}, nil
 }
 
 func (s *Server) Start() error {
@@ -76,19 +86,56 @@ func (s *Server) handleConnections(conn net.Conn) {
 }
 
 func (s *Server) handleJSON(conn net.Conn, buff []byte) {
-	var v = Message{}
-	err := json.NewDecoder(bytes.NewReader(buff)).Decode(&v)
+	msg := Message{}
+	err := json.NewDecoder(bytes.NewReader(buff)).Decode(&msg)
 	if err != nil {
 		log.Printf("cannot parse message %v \n", err)
 	}
-	log.Println(v)
-	switch v.Type {
+	switch msg.Type {
 	case MessageTypeNewTopic:
-		s.addNewTopic(v.Topic.Name)
+		s.addNewTopic(msg.Topic.Name)
 	case MessageTypeNew:
-		s.newMessage(v)
+		s.newMessage(msg)
+		s.save(msg)
 	case MessageTypeNewSubscriber:
-		s.addNewSubscriber(conn, v.Topic)
+		s.addNewSubscriber(conn, msg.Topic)
+	case MessageTypeACK:
+		s.ack(msg)
+	}
+}
+
+func (s *Server) save(message Message) {
+	if err := s.DB.SaveMessage(context.Background(), message); err != nil {
+		log.Printf("cannot save message with id %s, %v\n", message.ID, err)
+	}
+
+	err := s.DB.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchSize = 10
+		it := txn.NewIterator(opts)
+		defer it.Close()
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			k := item.Key()
+			err := item.Value(func(v []byte) error {
+				fmt.Printf("key=%s, value=%s\n", k, v)
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		log.Println(err)
+	}
+}
+
+func (s *Server) ack(message Message) {
+	if err := s.DB.UpdateMessageACK(context.Background(), message); err != nil {
+		log.Printf("cannot ACK message with id %s, %v", message.ID, err)
 	}
 }
 

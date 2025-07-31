@@ -11,6 +11,7 @@ const (
 	MessageTypeNewTopic      MType = "NEW_TOPIC"
 	MessageTypeNew           MType = "NEW_MESSAGE"
 	MessageTypeNewSubscriber MType = "NEW_SUB"
+	MessageTypeACK           MType = "ACK"
 
 	MessageFormatJSON MType = "JSON"
 )
@@ -28,6 +29,7 @@ func (t Topic) IsEmpty() bool {
 }
 
 type Message struct {
+	ID         string          `json:"id"`
 	Type       MType           `json:"type"`
 	Topic      Topic           `json:"topic"`
 	Body       json.RawMessage `json:"body"`

@@ -2,7 +2,7 @@ package manager
 
 import (
 	"encoding/json"
-	"fmt"
+	"github.com/google/uuid"
 	"github.com/tomiok/queuety/queuety/server"
 	"log"
 	"net"
@@ -28,6 +28,7 @@ func Connect(protocol, addr string) (*QConn, error) {
 
 func (q *QConn) NewTopic(name string) (server.Topic, error) {
 	m := server.Message{
+		ID:        uuid.NewString(),
 		Type:      server.MessageTypeNewTopic,
 		Topic:     server.NewTopic(name),
 		Timestamp: time.Now().UnixMilli(),
@@ -45,6 +46,7 @@ func (q *QConn) NewTopic(name string) (server.Topic, error) {
 
 func (q *QConn) Publish(t server.Topic, msg string) error {
 	m := server.Message{
+		ID:         uuid.NewString(),
 		Type:       server.MessageTypeNew,
 		Topic:      t,
 		BodyString: msg,
@@ -57,6 +59,7 @@ func (q *QConn) Publish(t server.Topic, msg string) error {
 
 func (q *QConn) PublishJSON(t server.Topic, msg string) error {
 	m := server.Message{
+		ID:        uuid.NewString(),
 		Type:      server.MessageTypeNew,
 		Topic:     t,
 		Body:      json.RawMessage(msg),
@@ -112,7 +115,11 @@ func (q *QConn) Subscribe(t server.Topic) error {
 }
 
 func (q *QConn) updateMessage(msg server.Message) {
-	fmt.Println("message ACKed")
+	msg.Type = server.MessageTypeACK
+	msg.ACK = true
+	if err := q.writeMessage(msg); err != nil {
+		log.Printf("cannot send ACK confirmation, message id %s \n", msg.ID)
+	}
 }
 
 func (q *QConn) qWrite(m server.Message) error {
