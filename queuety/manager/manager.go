@@ -2,6 +2,7 @@ package manager
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/tomiok/queuety/queuety/server"
 	"log"
 	"net"
@@ -44,11 +45,11 @@ func (q *QConn) NewTopic(name string) (server.Topic, error) {
 
 func (q *QConn) Publish(t server.Topic, msg string) error {
 	m := server.Message{
-		Type:      server.MessageTypeNew,
-		Topic:     t,
-		Body:      json.RawMessage(msg),
-		Timestamp: time.Now().Unix(),
-		ACK:       false,
+		Type:       server.MessageTypeNew,
+		Topic:      t,
+		BodyString: msg,
+		Timestamp:  time.Now().Unix(),
+		ACK:        false,
 	}
 
 	return q.qWrite(m)
@@ -74,14 +75,16 @@ func (q *QConn) Consume(t server.Topic) <-chan server.Message {
 
 	ch := make(chan server.Message, 1000)
 	go func() {
+		defer close(ch)
 		for {
 			b := make([]byte, 1024)
 			n, err := q.c.Read(b)
 			if err != nil {
-				panic(err)
+				log.Printf("cannot read messege %v \n", err)
+				continue
 			}
 
-			if len(b) > 0 {
+			if n > 0 {
 				msg, err := GetMessage(b[:n])
 				if err != nil {
 					log.Printf("cannot get messege %v \n", err)
@@ -89,6 +92,7 @@ func (q *QConn) Consume(t server.Topic) <-chan server.Message {
 				}
 
 				ch <- msg
+				q.updateMessage(msg)
 			}
 		}
 	}()
@@ -105,6 +109,10 @@ func (q *QConn) Subscribe(t server.Topic) error {
 	}
 	log.Printf("sending sub\n")
 	return q.qWrite(m)
+}
+
+func (q *QConn) updateMessage(msg server.Message) {
+	fmt.Println("message ACKed")
 }
 
 func (q *QConn) qWrite(m server.Message) error {
