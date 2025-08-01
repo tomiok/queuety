@@ -2,6 +2,7 @@ package manager
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/tomiok/queuety/queuety/server"
 	"log"
@@ -45,8 +46,10 @@ func (q *QConn) NewTopic(name string) (server.Topic, error) {
 }
 
 func (q *QConn) Publish(t server.Topic, msg string) error {
+	nextID := generateNextID()
 	m := server.Message{
-		ID:         uuid.NewString(),
+		ID:         generateID(server.MsgPrefixFalse, nextID),
+		NextID:     nextID,
 		Type:       server.MessageTypeNew,
 		Topic:      t,
 		BodyString: msg,
@@ -58,8 +61,10 @@ func (q *QConn) Publish(t server.Topic, msg string) error {
 }
 
 func (q *QConn) PublishJSON(t server.Topic, msg string) error {
+	nextID := generateNextID()
 	m := server.Message{
-		ID:        uuid.NewString(),
+		ID:        generateID(server.MsgPrefixFalse, nextID),
+		NextID:    nextID,
 		Type:      server.MessageTypeNew,
 		Topic:     t,
 		Body:      json.RawMessage(msg),
@@ -104,7 +109,10 @@ func (q *QConn) Consume(t server.Topic) <-chan server.Message {
 }
 
 func (q *QConn) Subscribe(t server.Topic) error {
+	id := generateNextID()
 	m := server.Message{
+		ID:        id,
+		NextID:    id,
 		Type:      server.MessageTypeNewSubscriber,
 		Topic:     t,
 		Timestamp: time.Now().UnixMilli(),
@@ -145,4 +153,12 @@ func GetMessage(b []byte) (server.Message, error) {
 	}
 
 	return msg, nil
+}
+
+func generateNextID() string {
+	return uuid.NewString()
+}
+
+func generateID(prefix string, id string) string {
+	return fmt.Sprintf("%s-%s", prefix, id)
 }

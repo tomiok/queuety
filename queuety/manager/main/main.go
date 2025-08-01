@@ -24,12 +24,14 @@ func main() {
 	}()
 
 	time.Sleep(1 * time.Second)
+	var i int
 	for {
-		err = conn.PublishJSON(topic, `{"message": "hello"}`)
+		err = conn.PublishJSON(topic, fmt.Sprintf(`{"message": "hello %d"}`, i))
 		if err != nil {
 			panic(err)
 		}
 
-		time.Sleep(time.Second * 5)
+		i++
+		time.Sleep(time.Second * 10)
 	}
 }

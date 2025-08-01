@@ -6,7 +6,7 @@ import (
 )
 
 func main() {
-	s, err := server.NewServer("tcp4", ":9845")
+	s, err := server.NewServer("tcp4", ":9845", "")
 	if err != nil {
 		panic(err)
 	}

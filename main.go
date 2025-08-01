@@ -6,6 +6,6 @@ import (
 )
 
 func main() {
-	s := server.NewServer("tcp4", ":9999")
+	s, _ := server.NewServer("tcp4", ":9999", "")
 	log.Fatal(s.Start())
 }

@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"time"
 )
 
 type Server struct {
@@ -29,8 +30,8 @@ type Publisher struct {
 type Consumer struct {
 }
 
-func NewServer(protocol, port string) (*Server, error) {
-	badger, err := NewBadger()
+func NewServer(protocol, port, badgerPath string) (*Server, error) {
+	db, err := NewBadger(badgerPath)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +42,7 @@ func NewServer(protocol, port string) (*Server, error) {
 		format:   string(MessageFormatJSON),
 		Topics:   make(map[Topic]struct{}),
 		clients:  make(map[Topic][]net.Conn),
-		DB:       BadgerDB{DB: badger},
+		DB:       BadgerDB{DB: db},
 	}, nil
 }
 
@@ -60,6 +61,40 @@ func (s *Server) Start() error {
 		}
 
 		go s.handleConnections(conn)
+
+		go s.printStats()
+	}
+}
+
+func (s *Server) printStats() {
+	ticker := time.NewTicker(5 * time.Second)
+
+	for {
+		select {
+		case <-ticker.C:
+			err := s.DB.View(func(txn *badger.Txn) error {
+				opts := badger.DefaultIteratorOptions
+				opts.PrefetchSize = 10
+				it := txn.NewIterator(opts)
+				defer it.Close()
+				for it.Rewind(); it.Valid(); it.Next() {
+					item := it.Item()
+					err := item.Value(func(v []byte) error {
+						fmt.Printf("value=%s\n", v)
+						return nil
+					})
+					if err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+
+			if err != nil {
+				log.Println(err)
+			}
+
+		}
 	}
 }
 
@@ -107,29 +142,6 @@ func (s *Server) handleJSON(conn net.Conn, buff []byte) {
 func (s *Server) save(message Message) {
 	if err := s.DB.SaveMessage(context.Background(), message); err != nil {
 		log.Printf("cannot save message with id %s, %v\n", message.ID, err)
-	}
-
-	err := s.DB.View(func(txn *badger.Txn) error {
-		opts := badger.DefaultIteratorOptions
-		opts.PrefetchSize = 10
-		it := txn.NewIterator(opts)
-		defer it.Close()
-		for it.Rewind(); it.Valid(); it.Next() {
-			item := it.Item()
-			k := item.Key()
-			err := item.Value(func(v []byte) error {
-				fmt.Printf("key=%s, value=%s\n", k, v)
-				return nil
-			})
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-
-	if err != nil {
-		log.Println(err)
 	}
 }
 
