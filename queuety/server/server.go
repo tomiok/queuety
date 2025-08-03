@@ -24,12 +24,6 @@ type Server struct {
 	DB     BadgerDB
 }
 
-type Publisher struct {
-}
-
-type Consumer struct {
-}
-
 func NewServer(protocol, port, badgerPath string) (*Server, error) {
 	db, err := NewBadger(badgerPath)
 	if err != nil {
@@ -105,7 +99,8 @@ func (s *Server) handleConnections(conn net.Conn) {
 		i, err := conn.Read(buff)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				continue
+				s.disconnect(conn)
+				break
 			}
 
 			log.Printf("cannot read message %v \n", err)
@@ -157,6 +152,28 @@ func (s *Server) addNewSubscriber(conn net.Conn, topic Topic) {
 
 func (s *Server) addNewTopic(name string) {
 	s.Topics[NewTopic(name)] = struct{}{}
+}
+
+func (s *Server) disconnect(conn net.Conn) {
+	for topic, clients := range s.clients {
+		for i, client := range clients {
+			if client == conn {
+				s.clients[topic] = append(clients[:i], clients[i+1:]...)
+				log.Printf("client removed: %s", topic.Name)
+				break
+			}
+		}
+
+		if len(s.clients[topic]) == 0 {
+			delete(s.clients, topic)
+			log.Printf("%s is empty, deleting", topic.Name)
+		}
+	}
+
+	err := conn.Close()
+	if err != nil {
+		log.Printf("cannot close deleted connection %v", err)
+	}
 }
 
 func (s *Server) newMessage(v Message) {

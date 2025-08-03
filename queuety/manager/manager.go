@@ -122,6 +122,10 @@ func (q *QConn) Subscribe(t server.Topic) error {
 	return q.qWrite(m)
 }
 
+func (q *QConn) Unsubscribe() error {
+	return nil
+}
+
 func (q *QConn) updateMessage(msg server.Message) {
 	msg.Type = server.MessageTypeACK
 	msg.ACK = true
