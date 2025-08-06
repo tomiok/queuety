@@ -20,8 +20,7 @@ type Server struct {
 
 	clients map[Topic][]net.Conn
 
-	Topics map[Topic]struct{}
-	DB     BadgerDB
+	DB BadgerDB
 }
 
 func NewServer(protocol, port, badgerPath string) (*Server, error) {
@@ -34,7 +33,6 @@ func NewServer(protocol, port, badgerPath string) (*Server, error) {
 		protocol: protocol,
 		port:     port,
 		format:   string(MessageFormatJSON),
-		Topics:   make(map[Topic]struct{}),
 		clients:  make(map[Topic][]net.Conn),
 		DB:       BadgerDB{DB: db},
 	}, nil
@@ -151,7 +149,7 @@ func (s *Server) addNewSubscriber(conn net.Conn, topic Topic) {
 }
 
 func (s *Server) addNewTopic(name string) {
-	s.Topics[NewTopic(name)] = struct{}{}
+	s.clients[NewTopic(name)] = []net.Conn{}
 }
 
 func (s *Server) disconnect(conn net.Conn) {
@@ -159,7 +157,7 @@ func (s *Server) disconnect(conn net.Conn) {
 		for i, client := range clients {
 			if client == conn {
 				s.clients[topic] = append(clients[:i], clients[i+1:]...)
-				log.Printf("client removed: %s", topic.Name)
+				log.Printf("client removed in topic: %s", topic.Name)
 				break
 			}
 		}
