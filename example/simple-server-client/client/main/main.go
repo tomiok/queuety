@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/tomiok/queuety/queuety/manager"
+	"github.com/tomiok/queuety/manager"
 	"time"
 )
 

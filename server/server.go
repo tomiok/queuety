@@ -18,23 +18,25 @@ type Server struct {
 	port     string
 	format   string
 
-	clients map[Topic][]net.Conn
+	clients   map[Topic][]net.Conn
+	scheduler Scheduler
 
 	DB BadgerDB
 }
 
-func NewServer(protocol, port, badgerPath string) (*Server, error) {
+func NewServer(protocol, port, badgerPath string, duration time.Duration) (*Server, error) {
 	db, err := NewBadger(badgerPath)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Server{
-		protocol: protocol,
-		port:     port,
-		format:   string(MessageFormatJSON),
-		clients:  make(map[Topic][]net.Conn),
-		DB:       BadgerDB{DB: db},
+		protocol:  protocol,
+		port:      port,
+		format:    string(MessageFormatJSON),
+		clients:   make(map[Topic][]net.Conn),
+		scheduler: Scheduler{window: time.NewTicker(duration)},
+		DB:        BadgerDB{DB: db},
 	}, nil
 }
 
@@ -53,11 +55,11 @@ func (s *Server) Start() error {
 		}
 
 		go s.handleConnections(conn)
-
-		go s.printStats()
+		go s.scheduler.run(s.DB.checkNotDeliveredMessages)
 	}
 }
 
+// unused b now.
 func (s *Server) printStats() {
 	ticker := time.NewTicker(5 * time.Second)
 
@@ -124,7 +126,6 @@ func (s *Server) handleJSON(conn net.Conn, buff []byte) {
 		s.addNewTopic(msg.Topic.Name)
 	case MessageTypeNew:
 		s.newMessage(msg)
-		s.save(msg)
 	case MessageTypeNewSubscriber:
 		s.addNewSubscriber(conn, msg.Topic)
 	case MessageTypeACK:
@@ -133,13 +134,13 @@ func (s *Server) handleJSON(conn net.Conn, buff []byte) {
 }
 
 func (s *Server) save(message Message) {
-	if err := s.DB.SaveMessage(context.Background(), message); err != nil {
+	if err := s.DB.saveMessage(context.Background(), message); err != nil {
 		log.Printf("cannot save message with id %s, %v\n", message.ID, err)
 	}
 }
 
 func (s *Server) ack(message Message) {
-	if err := s.DB.UpdateMessageACK(context.Background(), message); err != nil {
+	if err := s.DB.updateMessageACK(context.Background(), message); err != nil {
 		log.Printf("cannot ACK message with id %s, %v", message.ID, err)
 	}
 }
@@ -174,25 +175,33 @@ func (s *Server) disconnect(conn net.Conn) {
 	}
 }
 
-func (s *Server) newMessage(v Message) {
-	clients := s.clients[v.Topic]
+func (s *Server) newMessage(message Message) {
+	clients := s.clients[message.Topic]
 	if len(clients) == 0 {
-		log.Printf("topic not found \n actual name: %s, values in memory: %v", v.Topic.Name, s.clients)
+		log.Printf("topic not found \n actual name: %s, values in memory: %v", message.Topic.Name, s.clients)
 		return
 	}
 
 	// write for all the clients/connections
 	for _, conn := range clients {
-		b, err := v.Marshall()
+		b, err := message.Marshall()
 		if err != nil {
-			log.Printf("cannot marshall message: %v\n", err)
+			log.Printf("cannot marshall message: %v\n", err) //unclear error, don't want to re-intent.
 			return
 		}
 
 		_, err = conn.Write(b)
 		if err != nil {
-			log.Printf("cannot marshall message: %v\n", err)
+			log.Printf("cannot write in connection: %v message\n", err)
+			saveUnsentMessage(message, s.save)
 			return
 		}
+
+		s.save(message)
 	}
+}
+
+func saveUnsentMessage(msg Message, saveFn func(m Message)) {
+	msg.Attempts += 1
+	saveFn(msg)
 }

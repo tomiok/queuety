@@ -3,8 +3,10 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	badger "github.com/dgraph-io/badger/v4"
 	"log"
+	"strings"
 )
 
 type BadgerDB struct {
@@ -18,8 +20,15 @@ func NewBadger(path string) (*badger.DB, error) {
 	return badger.Open(badger.DefaultOptions(path))
 }
 
-func (b BadgerDB) SaveMessage(_ context.Context, message Message) error {
+// saveMessage will store the message at the first time, the id should start with false since is the
+// 1st time we are storing the message.
+func (b BadgerDB) saveMessage(_ context.Context, message Message) error {
+	if !strings.HasPrefix(message.ID, MsgPrefixFalse) {
+		return errors.New("invalid key")
+	}
+
 	return b.DB.Update(func(txn *badger.Txn) error {
+		message.Attempts += 1 //store the messages with attempt 1.
 		msgBytes, err := message.Marshall()
 		if err != nil {
 			return err
@@ -34,7 +43,7 @@ func (b BadgerDB) SaveMessage(_ context.Context, message Message) error {
 	})
 }
 
-func (b BadgerDB) UpdateMessageACK(_ context.Context, message Message) error {
+func (b BadgerDB) updateMessageACK(_ context.Context, message Message) error {
 	return b.DB.Update(func(txn *badger.Txn) error {
 		// delete entry with old key.
 		if err := txn.Delete([]byte(message.ID)); err != nil {
@@ -57,7 +66,7 @@ func (b BadgerDB) UpdateMessageACK(_ context.Context, message Message) error {
 	})
 }
 
-func (b BadgerDB) CheckNotDeliveredMessages() ([]Message, error) {
+func (b BadgerDB) checkNotDeliveredMessages() ([]Message, error) {
 	var messages []Message
 	err := b.View(func(txn *badger.Txn) error {
 		it := txn.NewIterator(badger.DefaultIteratorOptions)
@@ -72,7 +81,12 @@ func (b BadgerDB) CheckNotDeliveredMessages() ([]Message, error) {
 				if err != nil {
 					return err
 				}
-				messages = append(messages, msg)
+
+				if msg.Attempts <= 3 {
+					msg.Attempts += 1
+					messages = append(messages, msg)
+				}
+
 				return nil
 			})
 

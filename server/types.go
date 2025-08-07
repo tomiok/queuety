@@ -39,6 +39,7 @@ type Message struct {
 	BodyString string          `json:"body_string"`
 	Timestamp  int64           `json:"timestamp"`
 	ACK        bool            `json:"ack"`
+	Attempts   int             `json:"attempts"`
 }
 
 func (m Message) Marshall() ([]byte, error) {

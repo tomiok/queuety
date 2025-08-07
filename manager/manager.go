@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/tomiok/queuety/queuety/server"
+	"github.com/tomiok/queuety/server"
 	"log"
 	"net"
 	"time"
