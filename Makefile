@@ -8,7 +8,7 @@ VERSION=latest
 build:
 	@docker build -t $(IMAGE_NAME):$(VERSION) .
 
-run-queuety:
+run:
 	 @docker run -d \
 	  --name $(CONTAINER_NAME) \
 	  $(IMAGE_NAME):$(VERSION)

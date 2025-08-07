@@ -31,34 +31,18 @@ docker run -d --name queuety queuety:latest
 
 ```bash
 # Download the binary (replace with actual release URL)
-wget https://github.com/your-repo/queuety/releases/latest/download/queuety
+wget https://github.com/tomiok/queuety/releases/download/v0.0.1/queuety
 
 # Make it executable
 chmod +x queuety
 
 # Run with BadgerDB (creates ./badger directory)
-./queuety --storage=badger --port=9845
-
-# Run with in-memory storage
-./queuety --storage=memory --port=9845
-```
-
-## Configuration
-
-### Command Line Flags
-
-```bash
-./queuety \
-  --storage=badger \
-  --badger-path=./data \
-  --port=9845 \
-  --protocol=tcp \
-  --scheduler-duration=30s
+./queuety
 ```
 
 ## Storage Options
 
-### BadgerDB (Persistent) - the only one availbale by now.
+### BadgerDB (Persistent) - the only one available by now.
 - **Pros**: Persistent storage, crash recovery, high performance
 - **Cons**: Requires disk space
 - **Use case**: Production environments, when message durability is critical
@@ -82,10 +66,10 @@ repository) and can be used as a library, inside the manager package.
 
 ## Development
 
-### Building from Source
+### Building from Source (server)
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/tomiok/queuety.git
 cd queuety
 
 go build -o queuety ./server/main/main.go
@@ -105,16 +89,9 @@ make stop
 make clean
 ```
 
-## Monitoring
-
-### Health Check (Work in Progress)
-```bash
-# Check if Queuety is running
-curl http://localhost:9845/health
-
-# Or using netcat
-nc -z localhost 9845
-```
+## Client
+The client is only in GitHub now, you can use go get in order to use the manager.
+go install github.com/tomiok/queuety/manager@v0.0.1
 
 ## Roadmap
 
