@@ -1,0 +1,11 @@
+version: 1
+flags:
+  - -trimpath
+  - -tags=netgo
+env:
+  - CGO_ENABLED=0
+goos: linux
+goarch: amd64
+binary: queuety
+ldflags:
+  - -s -w
