@@ -2,7 +2,6 @@
 # They are provided by a third-party and are governed by
 # separate terms of service, privacy policy, and support
 # documentation.
-
 # This workflow lets you compile your Go project using a SLSA3 compliant builder.
 # This workflow will generate a so-called "provenance" file describing the steps
 # that were performed to generate the final binary.
@@ -16,6 +15,9 @@ on:
   workflow_dispatch:
   release:
     types: [created]
+  push:
+    tags:
+      - 'v*'
 
 permissions: read-all
 
@@ -29,10 +31,11 @@ jobs:
       id-token: write # To sign.
       contents: write # To upload release assets.
       actions: read   # To read workflow path.
-    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v1.4.0
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.0.0
     with:
-      go-version: 1.24
+      go-version: "1.24"  # Usa una versión estable de Go
+      config-file: .slsa-goreleaser.yml
+      evaluated-envs: "VERSION:${{github.ref_name}}"
       # =============================================================================================================
-      #     Optional: For more options, see https://github.com/slsa-framework/slsa-github-generator#golang-projects
+      #     Optional: Para más opciones, ver https://github.com/slsa-framework/slsa-github-generator#golang-projects
       # =============================================================================================================
-
