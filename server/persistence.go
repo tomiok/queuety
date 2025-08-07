@@ -15,7 +15,7 @@ type BadgerDB struct {
 
 func NewBadger(path string) (*badger.DB, error) {
 	if path == "" {
-		path = "/tmp/badger"
+		path = "/data/badger"
 	}
 	return badger.Open(badger.DefaultOptions(path))
 }
