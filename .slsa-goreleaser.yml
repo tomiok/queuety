@@ -7,6 +7,6 @@ env:
 goos: linux
 goarch: amd64
 binary: queuety
-main: ./server/main  # o ./manager, dependiendo de dónde esté tu main.go
+main: ./server/main/main.go  # o ./manager, dependiendo de dónde esté tu main.go
 ldflags:
   - -s -w
