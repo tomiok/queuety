@@ -50,7 +50,7 @@ func (s *Server) Start() error {
 	for {
 		conn, errAccept := l.Accept()
 		if errAccept != nil {
-			log.Printf("cannot accpet conn %v \n", errAccept)
+			log.Printf("cannot accept conn %v \n", errAccept)
 			continue
 		}
 
@@ -59,7 +59,7 @@ func (s *Server) Start() error {
 	}
 }
 
-// unused b now.
+// unused by now.
 func (s *Server) printStats() {
 	ticker := time.NewTicker(5 * time.Second)
 
@@ -112,7 +112,6 @@ func (s *Server) handleConnections(conn net.Conn) {
 			s.handleJSON(conn, buff[:i])
 		}
 	}
-
 }
 
 func (s *Server) handleJSON(conn net.Conn, buff []byte) {
