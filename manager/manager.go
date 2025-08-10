@@ -2,6 +2,7 @@ package manager
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/tomiok/queuety/server"
@@ -14,7 +15,12 @@ type QConn struct {
 	c net.Conn
 }
 
-func Connect(protocol, addr string) (*QConn, error) {
+type Auth struct {
+	User string
+	Pass string
+}
+
+func Connect(protocol, addr string, auth *Auth) (*QConn, error) {
 	conn, err := net.Dial(protocol, addr)
 	if err != nil {
 		return nil, err
@@ -22,6 +28,41 @@ func Connect(protocol, addr string) (*QConn, error) {
 
 	qConn := QConn{
 		conn,
+	}
+
+	if auth != nil {
+		msg := server.Message{
+			ID:        generateNextID(),
+			Type:      server.MessageTypeAuth,
+			User:      auth.User,
+			Password:  auth.Pass,
+			Timestamp: time.Now().Unix(),
+		}
+
+		b, err := msg.Marshall()
+		if err != nil {
+			return nil, err
+		}
+
+		_, _ = conn.Write(b)
+
+		//listen to the message back.
+		var buff = make([]byte, 1024)
+		n, err := conn.Read(buff)
+		if err != nil {
+			return nil, err
+		}
+
+		var msgResponse server.Message
+		if err = json.Unmarshal(buff[:n], &msgResponse); err != nil {
+			return nil, err
+		}
+
+		if msgResponse.Type == server.MessageAuthFailed {
+			return nil, errors.New("authentication failed")
+		}
+
+		return &qConn, nil
 	}
 
 	return &qConn, nil

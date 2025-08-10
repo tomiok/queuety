@@ -100,13 +100,10 @@ go install github.com/tomiok/queuety/manager@v0.0.1
 - [x] In-memory storage option
 - [x] Docker support
 - [ ] gRPC support
-- [ ] Authentication (user/password)
-- [ ] mTLS support
+- [x] Authentication (user/password)
 - [ ] Clustering
 - [ ] REST API
 - [ ] Metrics and monitoring
-- [ ] Message TTL
-- [ ] Dead letter queues
 
 ## Contributing
 

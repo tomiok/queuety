@@ -9,6 +9,7 @@ type Scheduler struct {
 	window *time.Ticker
 }
 
+// todo finish this
 func (s Scheduler) run(query func() ([]Message, error)) {
 	for {
 		select {
@@ -19,7 +20,6 @@ func (s Scheduler) run(query func() ([]Message, error)) {
 			}
 
 			if len(messages) == 0 {
-				log.Println("no pending messages")
 				continue
 			}
 

@@ -21,22 +21,50 @@ type Server struct {
 	clients   map[Topic][]net.Conn
 	scheduler Scheduler
 
+	User     string
+	Password string
+
 	DB BadgerDB
 }
 
-func NewServer(protocol, port, badgerPath string, duration time.Duration) (*Server, error) {
-	db, err := NewBadger(badgerPath)
+type Config struct {
+	Protocol   string
+	Port       string
+	BadgerPath string
+	Duration   time.Duration
+	Auth       *Auth
+}
+
+type Auth struct {
+	User     string
+	Password string //not encrypted.
+}
+
+func NewServer(c Config) (*Server, error) {
+	db, err := NewBadger(c.BadgerPath)
 	if err != nil {
 		return nil, err
 	}
 
+	var (
+		user string
+		pass string
+	)
+
+	if c.Auth != nil {
+		user = c.Auth.User
+		pass = c.Auth.Password
+	}
+
 	return &Server{
-		protocol:  protocol,
-		port:      port,
+		protocol:  c.Protocol,
+		port:      c.Port,
 		format:    string(MessageFormatJSON),
 		clients:   make(map[Topic][]net.Conn),
-		scheduler: Scheduler{window: time.NewTicker(duration)},
+		scheduler: Scheduler{window: time.NewTicker(c.Duration)},
 		DB:        BadgerDB{DB: db},
+		User:      user,
+		Password:  pass,
 	}, nil
 }
 
@@ -129,7 +157,60 @@ func (s *Server) handleJSON(conn net.Conn, buff []byte) {
 		s.addNewSubscriber(conn, msg.Topic)
 	case MessageTypeACK:
 		s.ack(msg)
+	case MessageTypeAuth:
+		s.doLogin(conn, msg)
 	}
+}
+
+// you need to set up user and password in order to secure the server.
+func (s *Server) needAuth() bool {
+	if s.User != "" {
+		return true
+	}
+
+	if s.Password != "" {
+		return true
+	}
+
+	return false
+}
+
+func (s *Server) validateAuth(msg Message) bool {
+	return s.User == msg.User && s.Password == msg.Password
+}
+
+func (s *Server) doLogin(conn net.Conn, message Message) {
+	fmt.Println(s)
+	if !s.needAuth() {
+		message.Type = MessageAuthSuccess //no auth need means successful.
+		b, err := message.Marshall()
+		if err != nil {
+			// just close the connection.
+			_ = conn.Close()
+		}
+		_, _ = conn.Write(b)
+		return
+	}
+
+	if !s.validateAuth(message) {
+		message.Type = MessageAuthFailed
+		b, err := message.Marshall()
+		if err != nil {
+			// just close the connection.
+			_ = conn.Close()
+		}
+		_, _ = conn.Write(b)
+		return
+	}
+
+	message.Type = MessageAuthSuccess
+	b, err := message.Marshall()
+	if err != nil {
+		// just close the connection.
+		_ = conn.Close()
+	}
+	_, _ = conn.Write(b)
+	return
 }
 
 func (s *Server) save(message Message) {
