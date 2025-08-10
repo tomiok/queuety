@@ -31,7 +31,7 @@ docker run -d --name queuety queuety:latest
 
 ```bash
 # Download the binary (replace with actual release URL)
-wget https://github.com/tomiok/queuety/releases/download/v0.0.1/queuety
+wget https://github.com/tomiok/queuety/releases/download/{version}/queuety
 
 # Make it executable
 chmod +x queuety
@@ -53,16 +53,16 @@ chmod +x queuety
 
 ---
 ## Examples
-### Server
+### Server without authentication (lookup the client too)
 Just run the server as the example above, or if you use this repo, go to the examples package.
 
 [Example usage](/example/simple-server-client/server)
 
-### Client
+### Server with  user and pass authentication (lookup the client too)
 The client, for this particular case is written in the same package (because if you fork you just need to change one
 repository) and can be used as a library, inside the manager package.
 
-[Example usage](/example/simple-server-client/client)
+[Example usage](/example/auth-server-client/server)
 
 ## Development
 
@@ -91,7 +91,7 @@ make clean
 
 ## Client
 The client is only in GitHub now, you can use go get in order to use the manager.
-go install github.com/tomiok/queuety/manager@v0.0.1
+go install github.com/tomiok/queuety/manager@v0.0.2
 
 ## Roadmap
 
