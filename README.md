@@ -91,7 +91,7 @@ make clean
 
 ## Client
 The client is only in GitHub now, you can use go get in order to use the manager.
-go install github.com/tomiok/queuety/manager@v0.0.2
+go install github.com/tomiok/queuety/manager@v0.0.4
 
 ## Roadmap
 
