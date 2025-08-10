@@ -114,3 +114,4 @@ go install github.com/tomiok/queuety/manager@v0.0.1
 5. Open a Pull Request
 
 ## License
+GPL 3.0
