@@ -3,13 +3,20 @@ package main
 import (
 	"github.com/tomiok/queuety/server"
 	"log"
-	"time"
 )
 
 func main() {
-	s, err := server.NewServer("tcp4", ":9845", "", time.Second)
+	s, err := server.NewServer(server.Config{
+		Protocol:   "tcp4",
+		Port:       ":9845",
+		BadgerPath: "",
+		Duration:   10,
+		Auth:       nil,
+	})
+
 	if err != nil {
 		panic(err)
 	}
+
 	log.Fatal(s.Start())
 }
