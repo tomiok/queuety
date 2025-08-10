@@ -18,25 +18,53 @@ type Server struct {
 	port     string
 	format   string
 
-	clients   map[Topic][]net.Conn
-	scheduler Scheduler
+	clients map[Topic][]net.Conn
+	window  *time.Ticker
+
+	User     string
+	Password string
 
 	DB BadgerDB
 }
 
-func NewServer(protocol, port, badgerPath string, duration time.Duration) (*Server, error) {
-	db, err := NewBadger(badgerPath)
+type Config struct {
+	Protocol   string
+	Port       string
+	BadgerPath string
+	Duration   time.Duration
+	Auth       *Auth
+}
+
+type Auth struct {
+	User     string
+	Password string //not encrypted.
+}
+
+func NewServer(c Config) (*Server, error) {
+	db, err := NewBadger(c.BadgerPath)
 	if err != nil {
 		return nil, err
 	}
 
+	var (
+		user string
+		pass string
+	)
+
+	if c.Auth != nil {
+		user = c.Auth.User
+		pass = c.Auth.Password
+	}
+
 	return &Server{
-		protocol:  protocol,
-		port:      port,
-		format:    string(MessageFormatJSON),
-		clients:   make(map[Topic][]net.Conn),
-		scheduler: Scheduler{window: time.NewTicker(duration)},
-		DB:        BadgerDB{DB: db},
+		protocol: c.Protocol,
+		port:     c.Port,
+		format:   string(MessageFormatJSON),
+		clients:  make(map[Topic][]net.Conn),
+		window:   time.NewTicker(c.Duration),
+		DB:       BadgerDB{DB: db},
+		User:     user,
+		Password: pass,
 	}, nil
 }
 
@@ -50,16 +78,16 @@ func (s *Server) Start() error {
 	for {
 		conn, errAccept := l.Accept()
 		if errAccept != nil {
-			log.Printf("cannot accpet conn %v \n", errAccept)
+			log.Printf("cannot accept conn %v \n", errAccept)
 			continue
 		}
 
 		go s.handleConnections(conn)
-		go s.scheduler.run(s.DB.checkNotDeliveredMessages)
+		go s.run(s.DB.checkNotDeliveredMessages)
 	}
 }
 
-// unused b now.
+// unused by now.
 func (s *Server) printStats() {
 	ticker := time.NewTicker(5 * time.Second)
 
@@ -112,7 +140,6 @@ func (s *Server) handleConnections(conn net.Conn) {
 			s.handleJSON(conn, buff[:i])
 		}
 	}
-
 }
 
 func (s *Server) handleJSON(conn net.Conn, buff []byte) {
@@ -125,57 +152,17 @@ func (s *Server) handleJSON(conn net.Conn, buff []byte) {
 	case MessageTypeNewTopic:
 		s.addNewTopic(msg.Topic.Name)
 	case MessageTypeNew:
-		s.newMessage(msg)
+		s.sendNewMessage(msg)
 	case MessageTypeNewSubscriber:
 		s.addNewSubscriber(conn, msg.Topic)
 	case MessageTypeACK:
 		s.ack(msg)
+	case MessageTypeAuth:
+		s.doLogin(conn, msg)
 	}
 }
 
-func (s *Server) save(message Message) {
-	if err := s.DB.saveMessage(context.Background(), message); err != nil {
-		log.Printf("cannot save message with id %s, %v\n", message.ID, err)
-	}
-}
-
-func (s *Server) ack(message Message) {
-	if err := s.DB.updateMessageACK(context.Background(), message); err != nil {
-		log.Printf("cannot ACK message with id %s, %v", message.ID, err)
-	}
-}
-
-func (s *Server) addNewSubscriber(conn net.Conn, topic Topic) {
-	s.clients[topic] = append(s.clients[topic], conn)
-}
-
-func (s *Server) addNewTopic(name string) {
-	s.clients[NewTopic(name)] = []net.Conn{}
-}
-
-func (s *Server) disconnect(conn net.Conn) {
-	for topic, clients := range s.clients {
-		for i, client := range clients {
-			if client == conn {
-				s.clients[topic] = append(clients[:i], clients[i+1:]...)
-				log.Printf("client removed in topic: %s", topic.Name)
-				break
-			}
-		}
-
-		if len(s.clients[topic]) == 0 {
-			delete(s.clients, topic)
-			log.Printf("%s is empty, deleting", topic.Name)
-		}
-	}
-
-	err := conn.Close()
-	if err != nil {
-		log.Printf("cannot close deleted connection %v", err)
-	}
-}
-
-func (s *Server) newMessage(message Message) {
+func (s *Server) sendNewMessage(message Message) {
 	clients := s.clients[message.Topic]
 	if len(clients) == 0 {
 		log.Printf("topic not found \n actual name: %s, values in memory: %v", message.Topic.Name, s.clients)
@@ -198,6 +185,99 @@ func (s *Server) newMessage(message Message) {
 		}
 
 		s.save(message)
+	}
+}
+
+func (s *Server) doLogin(conn net.Conn, message Message) {
+	fmt.Println(s)
+	if !s.needAuth() {
+		message.Type = MessageAuthSuccess //no auth need means successful.
+		b, err := message.Marshall()
+		if err != nil {
+			// just close the connection.
+			_ = conn.Close()
+		}
+		_, _ = conn.Write(b)
+		return
+	}
+
+	if !s.validateAuth(message) {
+		message.Type = MessageAuthFailed
+		b, err := message.Marshall()
+		if err != nil {
+			// just close the connection.
+			_ = conn.Close()
+		}
+		_, _ = conn.Write(b)
+		return
+	}
+
+	message.Type = MessageAuthSuccess
+	b, err := message.Marshall()
+	if err != nil {
+		// just close the connection.
+		_ = conn.Close()
+	}
+	_, _ = conn.Write(b)
+	return
+}
+
+func (s *Server) validateAuth(msg Message) bool {
+	return s.User == msg.User && s.Password == msg.Password
+}
+
+// you need to set up user and password in order to secure the server.
+func (s *Server) needAuth() bool {
+	if s.User != "" {
+		return true
+	}
+
+	if s.Password != "" {
+		return true
+	}
+
+	return false
+}
+
+func (s *Server) save(message Message) {
+	if err := s.DB.saveMessage(context.Background(), message); err != nil {
+		log.Printf("cannot save message with id %s, %v\n", message.ID, err)
+	}
+}
+
+func (s *Server) addNewSubscriber(conn net.Conn, topic Topic) {
+	s.clients[topic] = append(s.clients[topic], conn)
+}
+
+func (s *Server) addNewTopic(name string) {
+	s.clients[NewTopic(name)] = []net.Conn{}
+}
+
+func (s *Server) ack(message Message) {
+	if err := s.DB.updateMessageACK(context.Background(), message); err != nil {
+		log.Printf("cannot ACK message with id %s, %v", message.ID, err)
+	}
+}
+
+func (s *Server) disconnect(conn net.Conn) {
+	for topic, clients := range s.clients {
+		for i, client := range clients {
+			if client == conn {
+				s.clients[topic] = append(clients[:i], clients[i+1:]...)
+				log.Printf("client removed in topic: %s", topic.Name)
+				break
+			}
+		}
+
+		if len(s.clients[topic]) == 0 {
+			delete(s.clients, topic)
+			log.Printf("%s is empty, deleting", topic.Name)
+		}
+	}
+
+	err := conn.Close()
+	if err != nil {
+		log.Printf("cannot close deleted connection %v", err)
 	}
 }
 

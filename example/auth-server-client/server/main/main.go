@@ -7,13 +7,15 @@ import (
 
 func main() {
 	s, err := server.NewServer(server.Config{
-		Protocol:   "tcp",
+		Protocol:   "tcp4",
 		Port:       ":9845",
-		BadgerPath: "/tmp/data",
 		Duration:   10,
-		Auth:       nil,
+		BadgerPath: "/tmp/data",
+		Auth: &server.Auth{
+			User:     "admin",
+			Password: "admin",
+		},
 	})
-
 	if err != nil {
 		panic(err)
 	}

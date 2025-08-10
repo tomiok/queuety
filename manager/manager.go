@@ -2,6 +2,7 @@ package manager
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/tomiok/queuety/server"
@@ -14,7 +15,12 @@ type QConn struct {
 	c net.Conn
 }
 
-func Connect(protocol, addr string) (*QConn, error) {
+type Auth struct {
+	User string
+	Pass string
+}
+
+func Connect(protocol, addr string, auth *Auth) (*QConn, error) {
 	conn, err := net.Dial(protocol, addr)
 	if err != nil {
 		return nil, err
@@ -22,6 +28,41 @@ func Connect(protocol, addr string) (*QConn, error) {
 
 	qConn := QConn{
 		conn,
+	}
+
+	if auth != nil {
+		msg := server.Message{
+			ID:        generateNextID(),
+			Type:      server.MessageTypeAuth,
+			User:      auth.User,
+			Password:  auth.Pass,
+			Timestamp: time.Now().Unix(),
+		}
+
+		b, _err := msg.Marshall()
+		if _err != nil {
+			return nil, _err
+		}
+
+		_, _ = conn.Write(b)
+
+		//listen to the message back.
+		var buff = make([]byte, 1024)
+		n, errRead := conn.Read(buff)
+		if errRead != nil {
+			return nil, errRead
+		}
+
+		var msgResponse server.Message
+		if err = json.Unmarshal(buff[:n], &msgResponse); err != nil {
+			return nil, err
+		}
+
+		if msgResponse.Type == server.MessageAuthFailed {
+			return nil, errors.New("authentication failed")
+		}
+
+		return &qConn, nil
 	}
 
 	return &qConn, nil
@@ -76,7 +117,7 @@ func (q *QConn) PublishJSON(t server.Topic, msg string) error {
 }
 
 func (q *QConn) Consume(t server.Topic) <-chan server.Message {
-	if err := q.Subscribe(t); err != nil {
+	if err := q.subscribe(t); err != nil {
 		log.Printf("cannot sub %v\n", err)
 		return nil
 	}
@@ -93,7 +134,7 @@ func (q *QConn) Consume(t server.Topic) <-chan server.Message {
 			}
 
 			if n > 0 {
-				msg, err := GetMessage(b[:n])
+				msg, err := getMessage(b[:n])
 				if err != nil {
 					log.Printf("cannot get messege %v \n", err)
 					continue
@@ -108,7 +149,7 @@ func (q *QConn) Consume(t server.Topic) <-chan server.Message {
 	return ch
 }
 
-func (q *QConn) Subscribe(t server.Topic) error {
+func (q *QConn) subscribe(t server.Topic) error {
 	id := generateNextID()
 	m := server.Message{
 		ID:        id,
@@ -122,7 +163,7 @@ func (q *QConn) Subscribe(t server.Topic) error {
 	return q.qWrite(m)
 }
 
-func (q *QConn) Unsubscribe() error {
+func (q *QConn) unsubscribe() error {
 	return nil
 }
 
@@ -149,7 +190,7 @@ func (q *QConn) writeMessage(m server.Message) error {
 
 }
 
-func GetMessage(b []byte) (server.Message, error) {
+func getMessage(b []byte) (server.Message, error) {
 	var msg = server.Message{}
 	err := json.Unmarshal(b, &msg)
 	if err != nil {

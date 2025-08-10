@@ -12,6 +12,9 @@ const (
 	MessageTypeNew           MType = "NEW_MESSAGE"
 	MessageTypeNewSubscriber MType = "NEW_SUB"
 	MessageTypeACK           MType = "ACK"
+	MessageTypeAuth          MType = "AUTH"
+	MessageAuthSuccess       MType = "AUTH_SUCCESS"
+	MessageAuthFailed        MType = "AUTH_FAILED"
 
 	MessageFormatJSON MType = "JSON"
 
@@ -34,6 +37,8 @@ type Message struct {
 	ID         string          `json:"id"`
 	NextID     string          `json:"next_id"`
 	Type       MType           `json:"type"`
+	User       string          `json:"user"`
+	Password   string          `json:"password"`
 	Topic      Topic           `json:"topic"`
 	Body       json.RawMessage `json:"body"`
 	BodyString string          `json:"body_string"`
