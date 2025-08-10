@@ -25,11 +25,9 @@ COPY --from=builder /app/queuety /queuety
 
 EXPOSE 9845
 
-ENV STORAGE_TYPE=badger
 ENV BADGER_PATH=/data/badger
 ENV PROTOCOL=tcp
 ENV PORT=:9845
-ENV SCHEDULER_DURATION=30s
 
 VOLUME ["/data"]
 
