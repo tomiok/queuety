@@ -18,8 +18,8 @@ type Server struct {
 	port     string
 	format   string
 
-	clients   map[Topic][]net.Conn
-	scheduler Scheduler
+	clients map[Topic][]net.Conn
+	window  *time.Ticker
 
 	User     string
 	Password string
@@ -57,14 +57,14 @@ func NewServer(c Config) (*Server, error) {
 	}
 
 	return &Server{
-		protocol:  c.Protocol,
-		port:      c.Port,
-		format:    string(MessageFormatJSON),
-		clients:   make(map[Topic][]net.Conn),
-		scheduler: Scheduler{window: time.NewTicker(c.Duration)},
-		DB:        BadgerDB{DB: db},
-		User:      user,
-		Password:  pass,
+		protocol: c.Protocol,
+		port:     c.Port,
+		format:   string(MessageFormatJSON),
+		clients:  make(map[Topic][]net.Conn),
+		window:   time.NewTicker(c.Duration),
+		DB:       BadgerDB{DB: db},
+		User:     user,
+		Password: pass,
 	}, nil
 }
 
@@ -83,7 +83,7 @@ func (s *Server) Start() error {
 		}
 
 		go s.handleConnections(conn)
-		go s.scheduler.run(s.DB.checkNotDeliveredMessages)
+		go s.run(s.DB.checkNotDeliveredMessages)
 	}
 }
 
@@ -152,7 +152,7 @@ func (s *Server) handleJSON(conn net.Conn, buff []byte) {
 	case MessageTypeNewTopic:
 		s.addNewTopic(msg.Topic.Name)
 	case MessageTypeNew:
-		s.newMessage(msg)
+		s.sendNewMessage(msg)
 	case MessageTypeNewSubscriber:
 		s.addNewSubscriber(conn, msg.Topic)
 	case MessageTypeACK:
@@ -162,21 +162,30 @@ func (s *Server) handleJSON(conn net.Conn, buff []byte) {
 	}
 }
 
-// you need to set up user and password in order to secure the server.
-func (s *Server) needAuth() bool {
-	if s.User != "" {
-		return true
+func (s *Server) sendNewMessage(message Message) {
+	clients := s.clients[message.Topic]
+	if len(clients) == 0 {
+		log.Printf("topic not found \n actual name: %s, values in memory: %v", message.Topic.Name, s.clients)
+		return
 	}
 
-	if s.Password != "" {
-		return true
+	// write for all the clients/connections
+	for _, conn := range clients {
+		b, err := message.Marshall()
+		if err != nil {
+			log.Printf("cannot marshall message: %v\n", err) //unclear error, don't want to re-intent.
+			return
+		}
+
+		_, err = conn.Write(b)
+		if err != nil {
+			log.Printf("cannot write in connection: %v message\n", err)
+			saveUnsentMessage(message, s.save)
+			return
+		}
+
+		s.save(message)
 	}
-
-	return false
-}
-
-func (s *Server) validateAuth(msg Message) bool {
-	return s.User == msg.User && s.Password == msg.Password
 }
 
 func (s *Server) doLogin(conn net.Conn, message Message) {
@@ -213,15 +222,26 @@ func (s *Server) doLogin(conn net.Conn, message Message) {
 	return
 }
 
+func (s *Server) validateAuth(msg Message) bool {
+	return s.User == msg.User && s.Password == msg.Password
+}
+
+// you need to set up user and password in order to secure the server.
+func (s *Server) needAuth() bool {
+	if s.User != "" {
+		return true
+	}
+
+	if s.Password != "" {
+		return true
+	}
+
+	return false
+}
+
 func (s *Server) save(message Message) {
 	if err := s.DB.saveMessage(context.Background(), message); err != nil {
 		log.Printf("cannot save message with id %s, %v\n", message.ID, err)
-	}
-}
-
-func (s *Server) ack(message Message) {
-	if err := s.DB.updateMessageACK(context.Background(), message); err != nil {
-		log.Printf("cannot ACK message with id %s, %v", message.ID, err)
 	}
 }
 
@@ -231,6 +251,12 @@ func (s *Server) addNewSubscriber(conn net.Conn, topic Topic) {
 
 func (s *Server) addNewTopic(name string) {
 	s.clients[NewTopic(name)] = []net.Conn{}
+}
+
+func (s *Server) ack(message Message) {
+	if err := s.DB.updateMessageACK(context.Background(), message); err != nil {
+		log.Printf("cannot ACK message with id %s, %v", message.ID, err)
+	}
 }
 
 func (s *Server) disconnect(conn net.Conn) {
@@ -252,32 +278,6 @@ func (s *Server) disconnect(conn net.Conn) {
 	err := conn.Close()
 	if err != nil {
 		log.Printf("cannot close deleted connection %v", err)
-	}
-}
-
-func (s *Server) newMessage(message Message) {
-	clients := s.clients[message.Topic]
-	if len(clients) == 0 {
-		log.Printf("topic not found \n actual name: %s, values in memory: %v", message.Topic.Name, s.clients)
-		return
-	}
-
-	// write for all the clients/connections
-	for _, conn := range clients {
-		b, err := message.Marshall()
-		if err != nil {
-			log.Printf("cannot marshall message: %v\n", err) //unclear error, don't want to re-intent.
-			return
-		}
-
-		_, err = conn.Write(b)
-		if err != nil {
-			log.Printf("cannot write in connection: %v message\n", err)
-			saveUnsentMessage(message, s.save)
-			return
-		}
-
-		s.save(message)
 	}
 }
 

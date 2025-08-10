@@ -2,15 +2,9 @@ package server
 
 import (
 	"log"
-	"time"
 )
 
-type Scheduler struct {
-	window *time.Ticker
-}
-
-// todo finish this
-func (s Scheduler) run(query func() ([]Message, error)) {
+func (s *Server) run(query func() ([]Message, error)) {
 	for {
 		select {
 		case <-s.window.C:
@@ -23,7 +17,9 @@ func (s Scheduler) run(query func() ([]Message, error)) {
 				continue
 			}
 
-			log.Printf("a dead message here %s", messages[0])
+			for _, msg := range messages {
+				s.sendNewMessage(msg)
+			}
 		}
 	}
 }
