@@ -1,13 +1,21 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/tomiok/queuety/manager"
 	"time"
 )
 
+type msg struct {
+	Value int `json:"value"`
+}
+
 func main() {
-	conn, err := manager.Connect("tcp4", ":9845")
+	conn, err := manager.Connect("tcp4", ":9845", &manager.Auth{
+		User: "admin",
+		Pass: "admin",
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -18,7 +26,7 @@ func main() {
 	}
 
 	go func() {
-		for v := range conn.Consume(topic) {
+		for v := range manager.ConsumeJSON[msg](conn, topic) {
 			fmt.Println(v)
 		}
 	}()
@@ -26,12 +34,14 @@ func main() {
 	time.Sleep(1 * time.Second)
 	var i int
 	for {
-		err = conn.PublishJSON(topic, fmt.Sprintf(`{"message": "hello %d"}`, i))
+		_msg := msg{Value: i}
+		b, _ := json.Marshal(_msg)
+		err = conn.PublishJSON(topic, b)
 		if err != nil {
 			panic(err)
 		}
 
 		i++
-		time.Sleep(time.Second * 10000)
+		time.Sleep(time.Second * 2)
 	}
 }

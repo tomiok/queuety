@@ -93,6 +93,7 @@ func (q *QConn) Publish(t server.Topic, msg string) error {
 		NextID:     nextID,
 		Type:       server.MessageTypeNew,
 		Topic:      t,
+		Body:       json.RawMessage(msg),
 		BodyString: msg,
 		Timestamp:  time.Now().Unix(),
 		ACK:        false,
@@ -101,28 +102,32 @@ func (q *QConn) Publish(t server.Topic, msg string) error {
 	return q.qWrite(m)
 }
 
-func (q *QConn) PublishJSON(t server.Topic, msg string) error {
+func (q *QConn) PublishJSON(t server.Topic, msg []byte) error {
 	nextID := generateNextID()
 	m := server.Message{
-		ID:        generateID(server.MsgPrefixFalse, nextID),
-		NextID:    nextID,
-		Type:      server.MessageTypeNew,
-		Topic:     t,
-		Body:      json.RawMessage(msg),
-		Timestamp: time.Now().Unix(),
-		ACK:       false,
+		ID:         generateID(server.MsgPrefixFalse, nextID),
+		NextID:     nextID,
+		Type:       server.MessageTypeNew,
+		Topic:      t,
+		Body:       msg,
+		BodyString: string(msg),
+		Timestamp:  time.Now().Unix(),
+		ACK:        false,
 	}
 
 	return q.qWrite(m)
 }
 
-func (q *QConn) Consume(t server.Topic) <-chan server.Message {
-	if err := q.subscribe(t); err != nil {
+// ConsumeJSON will be used for type-safety. Is a generic function.
+// Both publish types has the ergonomics to send body as JSON and the string representation.
+// In this case, is just easier to reuse or replicate the JSON structure.
+func ConsumeJSON[T any](q *QConn, topic server.Topic) <-chan T {
+	if err := q.subscribe(topic); err != nil {
 		log.Printf("cannot sub %v\n", err)
 		return nil
 	}
 
-	ch := make(chan server.Message, 1000)
+	ch := make(chan T, 1000)
 	go func() {
 		defer close(ch)
 		for {
@@ -140,7 +145,49 @@ func (q *QConn) Consume(t server.Topic) <-chan server.Message {
 					continue
 				}
 
-				ch <- msg
+				var t T
+				if err = json.Unmarshal(msg.Body, &t); err != nil {
+					log.Printf("unable to unmarshal %v\n", err)
+				}
+
+				ch <- t
+				q.updateMessage(msg)
+			}
+		}
+	}()
+
+	return ch
+}
+
+// Consume will be used for receive the channel with string type. just raw string.
+// Both publish types has the ergonomics to send body as JSON and the string representation.
+// Consumer must be aware of which type is the publisher sending but is split in diff methods for simplicity and
+// will be compatible in the future if any change is included.
+func Consume(q *QConn, topic server.Topic) <-chan string {
+	if err := q.subscribe(topic); err != nil {
+		log.Printf("cannot sub %v\n", err)
+		return nil
+	}
+
+	ch := make(chan string, 1000)
+	go func() {
+		defer close(ch)
+		for {
+			b := make([]byte, 1024)
+			n, err := q.c.Read(b)
+			if err != nil {
+				log.Printf("cannot read messege %v \n", err)
+				continue
+			}
+
+			if n > 0 {
+				msg, err := getMessage(b[:n])
+				if err != nil {
+					log.Printf("cannot get messege %v \n", err)
+					continue
+				}
+
+				ch <- msg.BodyString
 				q.updateMessage(msg)
 			}
 		}

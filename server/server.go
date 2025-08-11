@@ -115,7 +115,6 @@ func (s *Server) printStats() {
 			if err != nil {
 				log.Println(err)
 			}
-
 		}
 	}
 }
@@ -143,7 +142,7 @@ func (s *Server) handleConnections(conn net.Conn) {
 }
 
 func (s *Server) handleJSON(conn net.Conn, buff []byte) {
-	msg := Message{}
+	var msg Message
 	err := json.NewDecoder(bytes.NewReader(buff)).Decode(&msg)
 	if err != nil {
 		log.Printf("cannot parse message %v \n", err)
