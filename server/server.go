@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -239,7 +238,7 @@ func (s *Server) needAuth() bool {
 }
 
 func (s *Server) save(message Message) {
-	if err := s.DB.saveMessage(context.Background(), message); err != nil {
+	if err := s.DB.saveMessage(message); err != nil {
 		log.Printf("cannot save message with id %s, %v\n", message.ID, err)
 	}
 }
@@ -253,7 +252,7 @@ func (s *Server) addNewTopic(name string) {
 }
 
 func (s *Server) ack(message Message) {
-	if err := s.DB.updateMessageACK(context.Background(), message); err != nil {
+	if err := s.DB.updateMessageACK(message); err != nil {
 		log.Printf("cannot ACK message with id %s, %v", message.ID, err)
 	}
 }

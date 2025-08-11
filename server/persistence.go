@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	badger "github.com/dgraph-io/badger/v4"
@@ -22,7 +21,7 @@ func NewBadger(path string) (*badger.DB, error) {
 
 // saveMessage will store the message at the first time, the id should start with false since is the
 // 1st time we are storing the message.
-func (b BadgerDB) saveMessage(_ context.Context, message Message) error {
+func (b BadgerDB) saveMessage(message Message) error {
 	if !strings.HasPrefix(message.ID, MsgPrefixFalse) {
 		return errors.New("invalid key")
 	}
@@ -43,7 +42,7 @@ func (b BadgerDB) saveMessage(_ context.Context, message Message) error {
 	})
 }
 
-func (b BadgerDB) updateMessageACK(_ context.Context, message Message) error {
+func (b BadgerDB) updateMessageACK(message Message) error {
 	return b.DB.Update(func(txn *badger.Txn) error {
 		// delete entry with old key.
 		if err := txn.Delete([]byte(message.ID)); err != nil {
