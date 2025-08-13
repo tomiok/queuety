@@ -56,13 +56,13 @@ chmod +x queuety
 ### Server without authentication (lookup the client too)
 Just run the server as the example above, or if you use this repo, go to the examples package.
 
-[Example usage](/example/simple-server-client/server)
+[Example usage](/_example/simple-server-client/server)
 
 ### Server with  user and pass authentication (lookup the client too)
 The client, for this particular case is written in the same package (because if you fork you just need to change one
 repository) and can be used as a library, inside the manager package.
 
-[Example usage](/example/auth-server-client/server)
+[Example usage](/_example/auth-server-client/server)
 
 ## Development
 

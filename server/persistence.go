@@ -3,7 +3,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	badger "github.com/dgraph-io/badger/v4"
+	"github.com/dgraph-io/badger/v4"
 	"log"
 	"strings"
 )
@@ -23,7 +23,7 @@ func NewBadger(path string) (*badger.DB, error) {
 // 1st time we are storing the message.
 func (b BadgerDB) saveMessage(message Message) error {
 	if !strings.HasPrefix(message.ID, MsgPrefixFalse) {
-		return errors.New("invalid key")
+		return errors.New("invalid key, should start with 'false'")
 	}
 
 	return b.DB.Update(func(txn *badger.Txn) error {
