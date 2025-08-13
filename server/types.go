@@ -16,9 +16,8 @@ const (
 	MessageAuthSuccess       MType = "AUTH_SUCCESS"
 	MessageAuthFailed        MType = "AUTH_FAILED"
 
-	MessageFormatJSON MType = "JSON"
-
-	MsgPrefixFalse = "false"
+	MessageFormatJSON = "JSON"
+	MsgPrefixFalse    = "false"
 )
 
 type Topic struct {

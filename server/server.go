@@ -24,6 +24,8 @@ type Server struct {
 	Password string
 
 	DB BadgerDB
+
+	listener net.Listener
 }
 
 type Config struct {
@@ -58,7 +60,7 @@ func NewServer(c Config) (*Server, error) {
 	return &Server{
 		protocol: c.Protocol,
 		port:     c.Port,
-		format:   string(MessageFormatJSON),
+		format:   MessageFormatJSON,
 		clients:  make(map[Topic][]net.Conn),
 		window:   time.NewTicker(c.Duration),
 		DB:       BadgerDB{DB: db},
@@ -74,6 +76,8 @@ func (s *Server) Start() error {
 		return err
 	}
 
+	s.listener = l
+
 	for {
 		conn, errAccept := l.Accept()
 		if errAccept != nil {
@@ -84,6 +88,10 @@ func (s *Server) Start() error {
 		go s.handleConnections(conn)
 		go s.run(s.DB.checkNotDeliveredMessages)
 	}
+}
+
+func (s *Server) Close() error {
+	return s.listener.Close()
 }
 
 // unused by now.
@@ -146,6 +154,7 @@ func (s *Server) handleJSON(conn net.Conn, buff []byte) {
 	if err != nil {
 		log.Printf("cannot parse message %v \n", err)
 	}
+
 	switch msg.Type {
 	case MessageTypeNewTopic:
 		s.addNewTopic(msg.Topic.Name)
@@ -182,6 +191,7 @@ func (s *Server) sendNewMessage(message Message) {
 			return
 		}
 
+		fmt.Println("saving message")
 		s.save(message)
 	}
 }
