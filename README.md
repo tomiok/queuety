@@ -97,7 +97,7 @@ go install github.com/tomiok/queuety/manager@v0.0.4
 
 - [x] At-least-once delivery
 - [x] BadgerDB persistence
-- [x] In-memory storage option
+- [ ] In-memory storage option
 - [x] Docker support
 - [ ] gRPC support
 - [x] Authentication (user/password)
