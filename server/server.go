@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/dgraph-io/badger/v4"
 	"io"
 	"log"
 	"net"
 	"time"
+
+	"github.com/dgraph-io/badger/v4"
 )
 
 type Server struct {
@@ -29,11 +30,12 @@ type Server struct {
 }
 
 type Config struct {
-	Protocol   string
-	Port       string
-	BadgerPath string
-	Duration   time.Duration
-	Auth       *Auth
+	Protocol     string
+	Port         string
+	BadgerPath   string
+	Duration     time.Duration
+	Auth         *Auth
+	InMemoryData bool
 }
 
 type Auth struct {
@@ -42,7 +44,7 @@ type Auth struct {
 }
 
 func NewServer(c Config) (*Server, error) {
-	db, err := NewBadger(c.BadgerPath)
+	db, err := NewBadger(c.BadgerPath, c.InMemoryData)
 	if err != nil {
 		return nil, err
 	}

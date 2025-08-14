@@ -3,12 +3,13 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	"github.com/dgraph-io/badger/v4"
-	"github.com/google/uuid"
 	"net"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/dgraph-io/badger/v4"
+	"github.com/google/uuid"
 )
 
 func Test_ServerStart(t *testing.T) {
@@ -40,7 +41,7 @@ func Test_ServerStart(t *testing.T) {
 }
 
 func Test_Server(t *testing.T) {
-	db, err := badger.Open(badger.DefaultOptions("").WithInMemory(true))
+	db, err := NewBadger("", true)
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
