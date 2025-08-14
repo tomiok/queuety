@@ -12,10 +12,7 @@ type msg struct {
 }
 
 func main() {
-	conn, err := manager.Connect("tcp4", ":9845", &manager.Auth{
-		User: "admin",
-		Pass: "admin",
-	})
+	conn, err := manager.Connect("tcp4", ":9845", nil)
 	if err != nil {
 		panic(err)
 	}
