@@ -3,16 +3,21 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	"github.com/dgraph-io/badger/v4"
 	"log"
 	"strings"
+
+	"github.com/dgraph-io/badger/v4"
 )
 
 type BadgerDB struct {
 	*badger.DB
 }
 
-func NewBadger(path string) (*badger.DB, error) {
+func NewBadger(path string, inMemory bool) (*badger.DB, error) {
+	if inMemory {
+		return badger.Open(badger.DefaultOptions("").WithInMemory(true))
+	}
+
 	if path == "" {
 		path = "/data/badger"
 	}
