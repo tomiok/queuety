@@ -40,7 +40,7 @@ type Config struct {
 
 type Auth struct {
 	User     string
-	Password string //not encrypted.
+	Password string // not encrypted.
 }
 
 func NewServer(c Config) (*Server, error) {
@@ -73,7 +73,6 @@ func NewServer(c Config) (*Server, error) {
 
 func (s *Server) Start() error {
 	l, err := net.Listen(s.protocol, s.port)
-
 	if err != nil {
 		return err
 	}
@@ -120,7 +119,6 @@ func (s *Server) printStats() {
 				}
 				return nil
 			})
-
 			if err != nil {
 				log.Println(err)
 			}
@@ -157,13 +155,13 @@ func (s *Server) handleJSON(conn net.Conn, buff []byte) {
 		log.Printf("cannot parse message %v \n", err)
 	}
 
-	switch msg.Type {
+	switch msg.Type() {
 	case MessageTypeNewTopic:
-		s.addNewTopic(msg.Topic.Name)
+		s.addNewTopic(msg.Topic().Name)
 	case MessageTypeNew:
 		s.sendNewMessage(msg)
 	case MessageTypeNewSubscriber:
-		s.addNewSubscriber(conn, msg.Topic)
+		s.addNewSubscriber(conn, msg.Topic())
 	case MessageTypeACK:
 		s.ack(msg)
 	case MessageTypeAuth:
@@ -172,9 +170,9 @@ func (s *Server) handleJSON(conn net.Conn, buff []byte) {
 }
 
 func (s *Server) sendNewMessage(message Message) {
-	clients := s.clients[message.Topic]
+	clients := s.clients[message.Topic()]
 	if len(clients) == 0 {
-		log.Printf("topic not found \n actual name: %s, values in memory: %v", message.Topic.Name, s.clients)
+		log.Printf("topic not found \n actual name: %s, values in memory: %v", message.Topic().Name, s.clients)
 		return
 	}
 
@@ -182,7 +180,7 @@ func (s *Server) sendNewMessage(message Message) {
 	for _, conn := range clients {
 		b, err := message.Marshall()
 		if err != nil {
-			log.Printf("cannot marshall message: %v\n", err) //unclear error, don't want to re-intent.
+			log.Printf("cannot marshall message: %v\n", err) // unclear error, don't want to re-intent.
 			return
 		}
 
@@ -201,7 +199,7 @@ func (s *Server) sendNewMessage(message Message) {
 func (s *Server) doLogin(conn net.Conn, message Message) {
 	fmt.Println(s)
 	if !s.needAuth() {
-		message.Type = MessageAuthSuccess //no auth need means successful.
+		message.updateAuthSuccess() // no auth need means successful.
 		b, err := message.Marshall()
 		if err != nil {
 			// just close the connection.
@@ -212,7 +210,7 @@ func (s *Server) doLogin(conn net.Conn, message Message) {
 	}
 
 	if !s.validateAuth(message) {
-		message.Type = MessageAuthFailed
+		message.updateAuthFailed()
 		b, err := message.Marshall()
 		if err != nil {
 			// just close the connection.
@@ -222,7 +220,7 @@ func (s *Server) doLogin(conn net.Conn, message Message) {
 		return
 	}
 
-	message.Type = MessageAuthSuccess
+	message.updateAuthSuccess()
 	b, err := message.Marshall()
 	if err != nil {
 		// just close the connection.
@@ -233,7 +231,7 @@ func (s *Server) doLogin(conn net.Conn, message Message) {
 }
 
 func (s *Server) validateAuth(msg Message) bool {
-	return s.User == msg.User && s.Password == msg.Password
+	return s.User == msg.User() && s.Password == msg.Password()
 }
 
 // you need to set up user and password in order to secure the server.
@@ -251,7 +249,7 @@ func (s *Server) needAuth() bool {
 
 func (s *Server) save(message Message) {
 	if err := s.DB.saveMessage(message); err != nil {
-		log.Printf("cannot save message with id %s, %v\n", message.ID, err)
+		log.Printf("cannot save message with id %s, %v\n", message.ID(), err)
 	}
 }
 
@@ -265,7 +263,7 @@ func (s *Server) addNewTopic(name string) {
 
 func (s *Server) ack(message Message) {
 	if err := s.DB.updateMessageACK(message); err != nil {
-		log.Printf("cannot ACK message with id %s, %v", message.ID, err)
+		log.Printf("cannot ACK message with id %s, %v", message.ID(), err)
 	}
 }
 
@@ -292,6 +290,6 @@ func (s *Server) disconnect(conn net.Conn) {
 }
 
 func saveUnsentMessage(msg Message, saveFn func(m Message)) {
-	msg.Attempts += 1
+	msg.IncAttempts()
 	saveFn(msg)
 }
