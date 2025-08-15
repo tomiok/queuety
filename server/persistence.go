@@ -27,18 +27,18 @@ func NewBadger(path string, inMemory bool) (*badger.DB, error) {
 // saveMessage will store the message at the first time, the id should start with false since is the
 // 1st time we are storing the message.
 func (b BadgerDB) saveMessage(message Message) error {
-	if !strings.HasPrefix(message.ID, MsgPrefixFalse) {
+	if !strings.HasPrefix(message.ID(), MsgPrefixFalse) {
 		return errors.New("invalid key, should start with 'false'")
 	}
 
 	return b.DB.Update(func(txn *badger.Txn) error {
-		message.Attempts += 1 //store the messages with attempt 1.
+		message.IncAttempts() // store the messages with attempt 1.
 		msgBytes, err := message.Marshall()
 		if err != nil {
 			return err
 		}
 
-		err = txn.Set([]byte(message.ID), msgBytes)
+		err = txn.Set([]byte(message.ID()), msgBytes)
 		if err != nil {
 			return err
 		}
@@ -50,18 +50,17 @@ func (b BadgerDB) saveMessage(message Message) error {
 func (b BadgerDB) updateMessageACK(message Message) error {
 	return b.DB.Update(func(txn *badger.Txn) error {
 		// delete entry with old key.
-		if err := txn.Delete([]byte(message.ID)); err != nil {
-			log.Printf("cannot delete message with ID %s", message.ID)
+		if err := txn.Delete([]byte(message.ID())); err != nil {
+			log.Printf("cannot delete message with ID %s", message.ID())
 		}
 
-		message.ID = message.NextID
-		message.ACK = true
+		message.updateACK()
 		msgBytes, err := message.Marshall()
 		if err != nil {
 			return err
 		}
 
-		err = txn.Set([]byte(message.ID), msgBytes)
+		err = txn.Set([]byte(message.ID()), msgBytes)
 		if err != nil {
 			return err
 		}
@@ -86,14 +85,13 @@ func (b BadgerDB) checkNotDeliveredMessages() ([]Message, error) {
 					return err
 				}
 
-				if msg.Attempts <= 3 {
-					msg.Attempts += 1
+				if msg.Attempts() <= 3 {
+					msg.IncAttempts()
 					messages = append(messages, msg)
 				}
 
 				return nil
 			})
-
 			if err != nil {
 				log.Printf("cannot get message with id %s, %v \n", k, err)
 				continue

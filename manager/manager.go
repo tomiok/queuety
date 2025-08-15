@@ -4,11 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/tomiok/queuety/server"
 	"log"
 	"net"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/tomiok/queuety/server"
 )
 
 type QConn struct {
@@ -31,13 +32,13 @@ func Connect(protocol, addr string, auth *Auth) (*QConn, error) {
 	}
 
 	if auth != nil {
-		msg := server.Message{
-			ID:        generateNextID(),
-			Type:      server.MessageTypeAuth,
-			User:      auth.User,
-			Password:  auth.Pass,
-			Timestamp: time.Now().Unix(),
-		}
+		msg := server.NewMessageBuilder().
+			WithID(generateNextID()).
+			WithType(server.MessageTypeAuth).
+			WithUser(auth.User).
+			WithPassword(auth.Pass).
+			WithTimestamp(time.Now().Unix()).
+			Build()
 
 		b, _err := msg.Marshall()
 		if _err != nil {
@@ -46,8 +47,8 @@ func Connect(protocol, addr string, auth *Auth) (*QConn, error) {
 
 		_, _ = conn.Write(b)
 
-		//listen to the message back.
-		var buff = make([]byte, 1024)
+		// listen to the message back.
+		buff := make([]byte, 1024)
 		n, errRead := conn.Read(buff)
 		if errRead != nil {
 			return nil, errRead
@@ -58,7 +59,7 @@ func Connect(protocol, addr string, auth *Auth) (*QConn, error) {
 			return nil, err
 		}
 
-		if msgResponse.Type == server.MessageAuthFailed {
+		if msgResponse.Type() == server.MessageAuthFailed {
 			return nil, errors.New("authentication failed")
 		}
 
@@ -69,13 +70,14 @@ func Connect(protocol, addr string, auth *Auth) (*QConn, error) {
 }
 
 func (q *QConn) NewTopic(name string) (server.Topic, error) {
-	m := server.Message{
-		ID:        uuid.NewString(),
-		Type:      server.MessageTypeNewTopic,
-		Topic:     server.NewTopic(name),
-		Timestamp: time.Now().UnixMilli(),
-		ACK:       false,
-	}
+	m := server.NewMessageBuilder().
+		WithID(uuid.NewString()).
+		WithType(server.MessageTypeNewTopic).
+		WithTopic(server.NewTopic(name)).
+		WithTimestamp(time.Now().Unix()).
+		WithAck(false).
+		Build()
+
 	err := q.qWrite(m)
 	if err != nil {
 		return server.Topic{}, err
@@ -86,34 +88,50 @@ func (q *QConn) NewTopic(name string) (server.Topic, error) {
 	}, nil
 }
 
+func (q *QConn) PublishMessage(pubMsg server.PublishMessage) error {
+	nextID := generateNextID()
+
+	m := server.NewMessageBuilder().
+		WithID(generateID(server.MsgPrefixFalse, nextID)).
+		WithNextID(nextID).
+		WithType(server.MessageTypeNew).
+		WithTopic(pubMsg.Topic).
+		WithBody(pubMsg.Body).
+		WithTimestamp(time.Now().Unix()).
+		WithAck(false).
+		Build()
+
+	return q.qWrite(m)
+}
+
 func (q *QConn) Publish(t server.Topic, msg string) error {
 	nextID := generateNextID()
-	m := server.Message{
-		ID:         generateID(server.MsgPrefixFalse, nextID),
-		NextID:     nextID,
-		Type:       server.MessageTypeNew,
-		Topic:      t,
-		Body:       json.RawMessage(msg),
-		BodyString: msg,
-		Timestamp:  time.Now().Unix(),
-		ACK:        false,
-	}
+
+	m := server.NewMessageBuilder().
+		WithID(generateID(server.MsgPrefixFalse, nextID)).
+		WithNextID(nextID).
+		WithType(server.MessageTypeNew).
+		WithTopic(t).
+		WithBody(json.RawMessage(msg)).
+		WithTimestamp(time.Now().Unix()).
+		WithAck(false).
+		Build()
 
 	return q.qWrite(m)
 }
 
 func (q *QConn) PublishJSON(t server.Topic, msg []byte) error {
 	nextID := generateNextID()
-	m := server.Message{
-		ID:         generateID(server.MsgPrefixFalse, nextID),
-		NextID:     nextID,
-		Type:       server.MessageTypeNew,
-		Topic:      t,
-		Body:       msg,
-		BodyString: string(msg),
-		Timestamp:  time.Now().Unix(),
-		ACK:        false,
-	}
+
+	m := server.NewMessageBuilder().
+		WithID(generateID(server.MsgPrefixFalse, nextID)).
+		WithNextID(nextID).
+		WithType(server.MessageTypeNew).
+		WithTopic(t).
+		WithBody(msg).
+		WithTimestamp(time.Now().Unix()).
+		WithAck(false).
+		Build()
 
 	return q.qWrite(m)
 }
@@ -146,7 +164,7 @@ func ConsumeJSON[T any](q *QConn, topic server.Topic) <-chan T {
 				}
 
 				var t T
-				if err = json.Unmarshal(msg.Body, &t); err != nil {
+				if err = json.Unmarshal(msg.Body(), &t); err != nil {
 					log.Printf("unable to unmarshal %v\n", err)
 				}
 
@@ -187,7 +205,7 @@ func Consume(q *QConn, topic server.Topic) <-chan string {
 					continue
 				}
 
-				ch <- msg.BodyString
+				ch <- msg.BodyString()
 				q.updateMessage(msg)
 			}
 		}
@@ -198,14 +216,15 @@ func Consume(q *QConn, topic server.Topic) <-chan string {
 
 func (q *QConn) subscribe(t server.Topic) error {
 	id := generateNextID()
-	m := server.Message{
-		ID:        id,
-		NextID:    id,
-		Type:      server.MessageTypeNewSubscriber,
-		Topic:     t,
-		Timestamp: time.Now().UnixMilli(),
-		ACK:       false,
-	}
+	m := server.NewMessageBuilder().
+		WithID(id).
+		WithNextID(id).
+		WithType(server.MessageTypeNewSubscriber).
+		WithTopic(t).
+		WithTimestamp(time.Now().UnixMilli()).
+		WithAck(false).
+		Build()
+
 	log.Printf("sending sub\n")
 	return q.qWrite(m)
 }
@@ -215,10 +234,21 @@ func (q *QConn) unsubscribe() error {
 }
 
 func (q *QConn) updateMessage(msg server.Message) {
-	msg.Type = server.MessageTypeACK
-	msg.ACK = true
-	if err := q.writeMessage(msg); err != nil {
-		log.Printf("cannot send ACK confirmation, message id %s \n", msg.ID)
+	m := server.NewMessageBuilder().
+		WithID(msg.ID()).
+		WithNextID(msg.NextID()).
+		WithUser(msg.User()).
+		WithPassword(msg.Password()).
+		WithTopic(msg.Topic()).
+		WithBody(msg.Body()).
+		WithTimestamp(msg.Timestamp()).
+		WithAttempts(msg.Attempts()).
+		WithType(server.MessageTypeACK).
+		WithAck(true).
+		Build()
+
+	if err := q.writeMessage(m); err != nil {
+		log.Printf("cannot send ACK confirmation, message id %s \n", msg.ID())
 	}
 }
 
@@ -234,12 +264,11 @@ func (q *QConn) writeMessage(m server.Message) error {
 
 	_, err = q.c.Write(b)
 	return err
-
 }
 
 func getMessage(b []byte) (server.Message, error) {
-	var msg = server.Message{}
-	err := json.Unmarshal(b, &msg)
+	msg := server.Message{}
+	err := msg.Unmarshal(b)
 	if err != nil {
 		return server.Message{}, err
 	}
