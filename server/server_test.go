@@ -20,7 +20,6 @@ func Test_ServerStart(t *testing.T) {
 		Duration:   10,
 		Auth:       nil,
 	})
-
 	if err != nil {
 		t.Fatalf("should not see an err here %v", err)
 	}
@@ -50,7 +49,7 @@ func Test_Server(t *testing.T) {
 		protocol: "tcp",
 		port:     ":60123",
 		clients:  map[Topic][]net.Conn{},
-		window:   time.NewTicker(time.Minute * 10), //IDK, hope is the same.
+		window:   time.NewTicker(time.Minute * 10), // IDK, hope is the same.
 		format:   MessageFormatJSON,
 		DB: BadgerDB{
 			DB: db,
@@ -77,17 +76,18 @@ func Test_Server(t *testing.T) {
 
 	id := uuid.NewString()
 	nextID := uuid.NewString()
-	msgPublish := Message{
-		ID:         "false-" + id,
-		NextID:     nextID,
-		Type:       MessageTypeNew,
-		Topic:      topic,
-		Body:       bMsg,
-		BodyString: string(bMsg),
-		Timestamp:  time.Now().Unix(),
-		ACK:        false,
-	}
-	srv.save(msgPublish)
+
+	msg := NewMessageBuilder().
+		WithID("false-" + id).
+		WithNextID(nextID).
+		WithType(MessageTypeNew).
+		WithTopic(topic).
+		WithBody(bMsg).
+		WithTimestamp(time.Now().Unix()).
+		WithAck(false).
+		Build()
+
+	srv.save(msg)
 
 	time.Sleep(10 * time.Microsecond)
 	err = db.View(func(txn *badger.Txn) error {
@@ -103,7 +103,6 @@ func Test_Server(t *testing.T) {
 
 		return nil
 	})
-
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
