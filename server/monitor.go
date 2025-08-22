@@ -10,8 +10,8 @@ import (
 )
 
 type statistics struct {
-	Connection connection `json:"connection"`
-	Topics     topics     `json:"topics"`
+	Connections connections `json:"connections"`
+	Topics      topics      `json:"topics"`
 }
 
 type topics map[string]topicDetail
@@ -21,10 +21,9 @@ type topicDetail struct {
 	MessagesSent int32 `json:"messages_sent"`
 }
 
-type connection struct {
-	Active         int    `json:"active"`
-	TotalConnected int    `json:"total_connected"`
-	Topics         topics `json:"topics"`
+type connections struct {
+	Active         int `json:"active"`
+	TotalConnected int `json:"total_connected"`
 }
 
 type monitor struct {
@@ -67,8 +66,8 @@ func (m *monitor) incSentMessages(topic Topic) {
 
 func (m *monitor) handleStats(w http.ResponseWriter, _ *http.Request) {
 	stats := statistics{
-		Connection: connection{},
-		Topics:     make(map[string]topicDetail),
+		Connections: connections{},
+		Topics:      make(map[string]topicDetail),
 	}
 
 	connections := make(map[net.Conn]bool)
@@ -78,7 +77,7 @@ func (m *monitor) handleStats(w http.ResponseWriter, _ *http.Request) {
 			_, ok := connections[c]
 			if !ok {
 				connections[c] = true
-				stats.Connection.TotalConnected++
+				stats.Connections.TotalConnected++
 			}
 		}
 
