@@ -27,6 +27,7 @@ type Server struct {
 	DB BadgerDB
 
 	listener net.Listener
+	monitor  *monitor
 }
 
 type Config struct {
@@ -79,6 +80,15 @@ func (s *Server) Start() error {
 	}
 
 	s.listener = l
+	// add addr monitor in Config
+	s.monitor = newMonitor("", s)
+
+	go func() {
+		err = s.monitor.start()
+		if err != nil {
+			log.Println("error occurred while starting the monitor", err)
+		}
+	}()
 
 	for {
 		conn, errAccept := l.Accept()
@@ -195,6 +205,9 @@ func (s *Server) sendNewMessage(message Message) {
 
 		fmt.Println("saving message")
 		s.save(message)
+
+		// check if the message was saved
+		s.monitor.incSentMessages(message.Topic)
 	}
 }
 
