@@ -57,8 +57,7 @@ func (s *Server) handleStats(w http.ResponseWriter, _ *http.Request) {
 		}
 	}
 
-	err := json.NewEncoder(w).Encode(&stats)
-	if err != nil {
+	if err := json.NewEncoder(w).Encode(&stats); if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
