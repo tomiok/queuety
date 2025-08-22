@@ -8,6 +8,8 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
@@ -27,7 +29,9 @@ type Server struct {
 	DB BadgerDB
 
 	listener net.Listener
-	monitor  *monitor
+
+	webServer    *http.Server
+	sentMessages map[Topic]*atomic.Int32
 }
 
 type Config struct {
@@ -37,6 +41,8 @@ type Config struct {
 	Duration     time.Duration
 	Auth         *Auth
 	InMemoryData bool
+
+	webServerPort string
 }
 
 type Auth struct {
@@ -69,6 +75,11 @@ func NewServer(c Config) (*Server, error) {
 		DB:       BadgerDB{DB: db},
 		User:     user,
 		Password: pass,
+
+		webServer: &http.Server{
+			Addr: net.JoinHostPort("", c.webServerPort),
+		},
+		sentMessages: make(map[Topic]*atomic.Int32),
 	}, nil
 }
 
@@ -80,15 +91,8 @@ func (s *Server) Start() error {
 	}
 
 	s.listener = l
-	// add addr monitor in Config
-	s.monitor = newMonitor("", s)
 
-	go func() {
-		err = s.monitor.start()
-		if err != nil {
-			log.Println("error occurred while starting the monitor", err)
-		}
-	}()
+	// go s.StartWebServer()
 
 	for {
 		conn, errAccept := l.Accept()
@@ -100,6 +104,18 @@ func (s *Server) Start() error {
 		go s.handleConnections(conn)
 		go s.run(s.DB.checkNotDeliveredMessages)
 	}
+}
+
+func (s *Server) StartWebServer() error {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /stats", s.handleStats)
+
+	s.webServer.Handler = mux
+	if err := s.webServer.ListenAndServe(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Server) Close() error {
@@ -207,7 +223,7 @@ func (s *Server) sendNewMessage(message Message) {
 		s.save(message)
 
 		// check if the message was saved
-		s.monitor.incSentMessages(message.Topic)
+		s.incSentMessages(message.Topic)
 	}
 }
 
