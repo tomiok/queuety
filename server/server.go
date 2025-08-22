@@ -106,18 +106,6 @@ func (s *Server) Start() error {
 	}
 }
 
-func (s *Server) StartWebServer() error {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /stats", s.handleStats)
-
-	s.webServer.Handler = mux
-	if err := s.webServer.ListenAndServe(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (s *Server) Close() error {
 	return s.listener.Close()
 }

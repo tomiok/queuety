@@ -25,8 +25,16 @@ type connections struct {
 	TotalConnected int `json:"total_connected"`
 }
 
-func (s *Server) incSentMessages(topic Topic) {
-	s.sentMessages[topic].Add(1)
+func (s *Server) StartWebServer() error {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /stats", s.handleStats)
+
+	s.webServer.Handler = mux
+	if err := s.webServer.ListenAndServe(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Server) handleStats(w http.ResponseWriter, _ *http.Request) {
@@ -57,7 +65,7 @@ func (s *Server) handleStats(w http.ResponseWriter, _ *http.Request) {
 		}
 	}
 
-	if err := json.NewEncoder(w).Encode(&stats); if err != nil {
+	if err := json.NewEncoder(w).Encode(&stats); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -66,7 +74,11 @@ func (s *Server) handleStats(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) Shutdown() error {
+func (s *Server) incSentMessages(topic Topic) {
+	s.sentMessages[topic].Add(1)
+}
+
+func (s *Server) ShutdownWebServer() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
