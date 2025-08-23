@@ -29,7 +29,7 @@ type Server struct {
 	listener net.Listener
 
 	webServer    *http.Server
-	sentMessages map[Topic]atomic.Int32
+	sentMessages map[Topic]*atomic.Int32
 }
 
 type Config struct {
@@ -77,7 +77,7 @@ func NewServer(c Config) (*Server, error) {
 		webServer: &http.Server{
 			Addr: net.JoinHostPort("", c.WebServerPort),
 		},
-		sentMessages: make(map[Topic]atomic.Int32),
+		sentMessages: make(map[Topic]*atomic.Int32),
 	}, nil
 }
 
