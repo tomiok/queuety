@@ -39,6 +39,6 @@ func main() {
 		}
 
 		i++
-		time.Sleep(time.Second * 2)
+		time.Sleep(time.Second * 20000)
 	}
 }

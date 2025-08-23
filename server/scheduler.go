@@ -17,9 +17,9 @@ func (s *Server) run(query func() ([]Message, error)) {
 				continue
 			}
 
-			for _, msg := range messages {
-				s.sendNewMessage(msg)
-			}
+			//for _, msg := range messages {
+			//	s.sendNewMessage(msg)
+			//}
 		}
 	}
 }

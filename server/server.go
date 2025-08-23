@@ -29,7 +29,7 @@ type Server struct {
 	listener net.Listener
 
 	webServer    *http.Server
-	sentMessages map[Topic]*atomic.Int32
+	sentMessages map[Topic]atomic.Int32
 }
 
 type Config struct {
@@ -77,7 +77,7 @@ func NewServer(c Config) (*Server, error) {
 		webServer: &http.Server{
 			Addr: net.JoinHostPort("", c.WebServerPort),
 		},
-		sentMessages: make(map[Topic]*atomic.Int32),
+		sentMessages: make(map[Topic]atomic.Int32),
 	}, nil
 }
 
@@ -159,7 +159,7 @@ func (s *Server) handleConnections(conn net.Conn) {
 		}
 
 		switch s.format {
-		case string(MessageFormatJSON):
+		case MessageFormatJSON:
 			s.handleJSON(conn, buff[:i])
 		}
 	}
@@ -190,7 +190,7 @@ func (s *Server) handleJSON(conn net.Conn, buff []byte) {
 func (s *Server) sendNewMessage(message Message) {
 	clients := s.clients[message.Topic()]
 	if len(clients) == 0 {
-		log.Printf("topic not found \n actual name: %s, values in memory: %v", message.Topic().Name, s.clients)
+		log.Printf("topic not found, actual name: %s, values in memory: %v", message.Topic().Name, s.clients)
 		return
 	}
 
@@ -213,7 +213,7 @@ func (s *Server) sendNewMessage(message Message) {
 		s.save(message)
 
 		// check if the message was saved
-		s.incSentMessages(message.Topic)
+		s.incSentMessages(message.Topic())
 	}
 }
 
