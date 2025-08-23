@@ -198,10 +198,8 @@ quality: format-check lint test coverage ## Run all quality checks
 
 ## Docker support
 run: build ## Build and run Docker container
-	@$(PRINT) "$(BLUE)Running Docker container...$(NC)\n"
-	@docker run -d \
-		--name $(CONTAINER_NAME) \
-		$(IMAGE_NAME):$(VERSION)
+	@$(PRINT) "$(BLUE)Running Docker container with Docker Compose...$(NC)\n"
+	@docker compose up -d
 
 stop: ## Stop and remove Docker containers
 	@$(PRINT) "$(BLUE)Stopping Docker containers...$(NC)\n"

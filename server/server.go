@@ -213,7 +213,7 @@ func (s *Server) sendNewMessage(message Message) {
 		s.save(message)
 
 		// check if the message was saved
-		s.incSentMessages(message.Topic)
+		s.incSentMessages(message.Topic())
 	}
 }
 
