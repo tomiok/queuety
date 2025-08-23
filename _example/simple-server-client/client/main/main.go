@@ -12,7 +12,7 @@ type msg struct {
 }
 
 func main() {
-	conn, err := manager.Connect("tcp4", ":9845", nil)
+	conn, err := manager.Connect("tcp4", ":9845", nil, nil)
 	if err != nil {
 		panic(err)
 	}

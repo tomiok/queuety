@@ -1,0 +1,25 @@
+# Telemetry configuration template
+telemetry:
+enabled: true
+backend: "prometheus"  # prometheus, datadog, newrelic, otlp
+
+# Prometheus config
+prometheus:
+port: 9090
+endpoint: "/metrics"
+
+# Datadog config
+datadog:
+api_key: "${DD_API_KEY}"
+site: "datadoghq.com"
+
+# OTLP generic config
+otlp:
+endpoint: "http://localhost:4317"
+headers:
+authorization: "Bearer ${TOKEN}"
+
+# Sampling configuration
+tracing:
+sample_rate: 1.0  # 100% for development
+max_spans_per_trace: 100

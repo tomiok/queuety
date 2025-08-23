@@ -1,9 +1,12 @@
 package manager
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/tomiok/queuety/telemetry"
+	"go.opentelemetry.io/otel/attribute"
 	"log"
 	"net"
 	"time"
@@ -13,7 +16,8 @@ import (
 )
 
 type QConn struct {
-	c net.Conn
+	c         net.Conn
+	telemetry *telemetry.Telemetry
 }
 
 type Auth struct {
@@ -21,14 +25,22 @@ type Auth struct {
 	Pass string
 }
 
-func Connect(protocol, addr string, auth *Auth) (*QConn, error) {
+func Connect(protocol, addr string, auth *Auth, tel *telemetry.Telemetry) (*QConn, error) {
+	if tel == nil {
+		tel = &telemetry.Telemetry{}
+	}
+
+	ctx := context.Background()
 	conn, err := net.Dial(protocol, addr)
+	ctx, span := tel.StartSpan(ctx, "client.connect")
+	defer span.End()
 	if err != nil {
 		return nil, err
 	}
 
 	qConn := QConn{
 		conn,
+		tel,
 	}
 
 	if auth != nil {
@@ -89,8 +101,22 @@ func (q *QConn) NewTopic(name string) (server.Topic, error) {
 }
 
 func (q *QConn) PublishMessage(pubMsg server.PublishMessage) error {
-	nextID := generateNextID()
+	ctx := context.Background()
+	ctx, span := q.telemetry.StartSpan(ctx, "message.publish")
+	defer span.End()
 
+	topicName := pubMsg.Topic.Name
+	span.SetAttributes(
+		attribute.String("topic", topicName),
+	)
+
+	start := time.Now()
+	defer func() {
+		duration := time.Since(start).Seconds()
+		q.telemetry.RecordMessageDuration(ctx, duration, topicName, "publish")
+	}()
+
+	nextID := generateNextID()
 	m := server.NewMessageBuilder().
 		WithID(generateID(server.MsgPrefixFalse, nextID)).
 		WithNextID(nextID).
@@ -101,7 +127,14 @@ func (q *QConn) PublishMessage(pubMsg server.PublishMessage) error {
 		WithAck(false).
 		Build()
 
-	return q.qWrite(m)
+	err := q.qWrite(m)
+	if err != nil {
+		q.telemetry.IncrementMessagesFailed(ctx, topicName, "publish_error")
+		return err
+	}
+
+	q.telemetry.IncrementMessagesPublished(ctx, topicName)
+	return nil
 }
 
 func (q *QConn) Publish(t server.Topic, msg string) error {

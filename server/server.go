@@ -2,9 +2,12 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/tomiok/queuety/telemetry"
+	"go.opentelemetry.io/otel/attribute"
 	"io"
 	"log"
 	"net"
@@ -24,7 +27,8 @@ type Server struct {
 	User     string
 	Password string
 
-	DB BadgerDB
+	DB        BadgerDB
+	telemetry *telemetry.Telemetry
 
 	listener net.Listener
 }
@@ -36,6 +40,8 @@ type Config struct {
 	Duration     time.Duration
 	Auth         *Auth
 	InMemoryData bool
+
+	Telemetry *telemetry.Telemetry
 }
 
 type Auth struct {
@@ -59,15 +65,20 @@ func NewServer(c Config) (*Server, error) {
 		pass = c.Auth.Password
 	}
 
+	if c.Telemetry == nil {
+		c.Telemetry = &telemetry.Telemetry{}
+	}
+
 	return &Server{
-		protocol: c.Protocol,
-		port:     c.Port,
-		format:   MessageFormatJSON,
-		clients:  make(map[Topic][]net.Conn),
-		window:   time.NewTicker(c.Duration),
-		DB:       BadgerDB{DB: db},
-		User:     user,
-		Password: pass,
+		protocol:  c.Protocol,
+		port:      c.Port,
+		format:    MessageFormatJSON,
+		clients:   make(map[Topic][]net.Conn),
+		window:    time.NewTicker(c.Duration),
+		DB:        BadgerDB{DB: db},
+		User:      user,
+		Password:  pass,
+		telemetry: c.Telemetry,
 	}, nil
 }
 
@@ -110,7 +121,6 @@ func (s *Server) printStats() {
 				for it.Rewind(); it.Valid(); it.Next() {
 					item := it.Item()
 					err := item.Value(func(v []byte) error {
-						fmt.Printf("value=%s\n", v)
 						return nil
 					})
 					if err != nil {
@@ -127,6 +137,13 @@ func (s *Server) printStats() {
 }
 
 func (s *Server) handleConnections(conn net.Conn) {
+	ctx := context.Background()
+	ctx, span := s.telemetry.StartSpan(ctx, "connection.handle")
+	defer span.End()
+
+	s.telemetry.IncrementActiveConnections(ctx)
+	defer s.telemetry.DecrementActiveConnections(ctx)
+
 	for {
 		buff := make([]byte, 2048)
 
@@ -136,19 +153,19 @@ func (s *Server) handleConnections(conn net.Conn) {
 				s.disconnect(conn)
 				break
 			}
-
 			log.Printf("cannot read message %v \n", err)
 			continue
 		}
 
+		s.telemetry.IncrementBytesReceived(ctx, int64(i))
+
 		switch s.format {
-		case string(MessageFormatJSON):
-			s.handleJSON(conn, buff[:i])
+		case MessageFormatJSON:
+			s.handleJSON(ctx, conn, buff[:i])
 		}
 	}
 }
-
-func (s *Server) handleJSON(conn net.Conn, buff []byte) {
+func (s *Server) handleJSON(ctx context.Context, conn net.Conn, buff []byte) {
 	var msg Message
 	err := json.NewDecoder(bytes.NewReader(buff)).Decode(&msg)
 	if err != nil {
@@ -159,41 +176,61 @@ func (s *Server) handleJSON(conn net.Conn, buff []byte) {
 	case MessageTypeNewTopic:
 		s.addNewTopic(msg.Topic().Name)
 	case MessageTypeNew:
-		s.sendNewMessage(msg)
+		s.sendNewMessage(ctx, msg)
 	case MessageTypeNewSubscriber:
 		s.addNewSubscriber(conn, msg.Topic())
 	case MessageTypeACK:
-		s.ack(msg)
+		s.ack(ctx, msg, s.telemetry)
 	case MessageTypeAuth:
 		s.doLogin(conn, msg)
 	}
 }
 
-func (s *Server) sendNewMessage(message Message) {
+func (s *Server) sendNewMessage(ctx context.Context, message Message) {
+	ctx, span := s.telemetry.StartSpan(ctx, "message.deliver")
+	defer span.End()
+
+	topicName := message.Topic().Name
+	span.SetAttributes(
+		attribute.String("topic", topicName),
+		attribute.String("message_id", message.ID()),
+	)
+
 	clients := s.clients[message.Topic()]
 	if len(clients) == 0 {
-		log.Printf("topic not found \n actual name: %s, values in memory: %v", message.Topic().Name, s.clients)
+		s.telemetry.IncrementMessagesFailed(ctx, topicName, "no_subscribers")
+		log.Printf("topic not found \n actual name: %s, values in memory: %v", topicName, s.clients)
 		return
 	}
+
+	start := time.Now()
+	defer func() {
+		duration := time.Since(start).Seconds()
+		s.telemetry.RecordMessageDuration(ctx, duration, topicName, "deliver")
+	}()
 
 	// write for all the clients/connections
 	for _, conn := range clients {
 		b, err := message.Marshall()
 		if err != nil {
-			log.Printf("cannot marshall message: %v\n", err) // unclear error, don't want to re-intent.
+			s.telemetry.IncrementMessagesFailed(ctx, topicName, "marshall_error")
+			log.Printf("cannot marshall message: %v\n", err)
 			return
 		}
 
 		_, err = conn.Write(b)
 		if err != nil {
+			s.telemetry.IncrementMessagesFailed(ctx, topicName, "write_error")
 			log.Printf("cannot write in connection: %v message\n", err)
-			saveUnsentMessage(message, s.save)
+			saveUnsentMessage(ctx, s.telemetry, message, s.save)
 			return
 		}
 
-		fmt.Println("saving message")
-		s.save(message)
+		s.telemetry.IncrementBytesSent(ctx, int64(len(b)))
+		s.save(ctx, message, s.telemetry)
 	}
+
+	s.telemetry.IncrementMessagesDelivered(ctx, topicName)
 }
 
 func (s *Server) doLogin(conn net.Conn, message Message) {
@@ -247,10 +284,23 @@ func (s *Server) needAuth() bool {
 	return false
 }
 
-func (s *Server) save(message Message) {
+func (s *Server) save(ctx context.Context, message Message, tel *telemetry.Telemetry) {
+	ctx, span := tel.StartBadgerSpan(ctx, "save")
+	defer span.End()
+
+	start := time.Now()
+	defer func() {
+		duration := time.Since(start).Seconds()
+		tel.RecordBadgerDuration(ctx, duration, "save")
+	}()
+
 	if err := s.DB.saveMessage(message); err != nil {
 		log.Printf("cannot save message with id %s, %v\n", message.ID(), err)
+		tel.IncrementBadgerOps(ctx, "save", "error")
+		return
 	}
+
+	tel.IncrementBadgerOps(ctx, "save", "success")
 }
 
 func (s *Server) addNewSubscriber(conn net.Conn, topic Topic) {
@@ -261,10 +311,22 @@ func (s *Server) addNewTopic(name string) {
 	s.clients[NewTopic(name)] = []net.Conn{}
 }
 
-func (s *Server) ack(message Message) {
+func (s *Server) ack(ctx context.Context, message Message, tel *telemetry.Telemetry) {
+	ctx, span := tel.StartBadgerSpan(ctx, "ack")
+	defer span.End()
+
+	start := time.Now()
+	defer func() {
+		duration := time.Since(start).Seconds()
+		tel.RecordBadgerDuration(ctx, duration, "ack")
+	}()
+
 	if err := s.DB.updateMessageACK(message); err != nil {
 		log.Printf("cannot ACK message with id %s, %v", message.ID(), err)
+		tel.IncrementBadgerOps(ctx, "ack", "error")
+		return
 	}
+	tel.IncrementBadgerOps(ctx, "ack", "success")
 }
 
 func (s *Server) disconnect(conn net.Conn) {
@@ -289,7 +351,7 @@ func (s *Server) disconnect(conn net.Conn) {
 	}
 }
 
-func saveUnsentMessage(msg Message, saveFn func(m Message)) {
+func saveUnsentMessage(ctx context.Context, tel *telemetry.Telemetry, msg Message, saveFn func(context.Context, Message, *telemetry.Telemetry)) {
 	msg.IncAttempts()
-	saveFn(msg)
+	saveFn(ctx, msg, tel)
 }

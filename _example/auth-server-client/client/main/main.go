@@ -15,7 +15,7 @@ func main() {
 	conn, err := manager.Connect("tcp4", ":9845", &manager.Auth{
 		User: "admin",
 		Pass: "admin",
-	})
+	}, nil)
 
 	if err != nil {
 		panic(err)

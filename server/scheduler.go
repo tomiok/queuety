@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"log"
 )
 
@@ -18,7 +19,7 @@ func (s *Server) run(query func() ([]Message, error)) {
 			}
 
 			for _, msg := range messages {
-				s.sendNewMessage(msg)
+				s.sendNewMessage(context.TODO(), msg) //TODO fix this.
 			}
 		}
 	}

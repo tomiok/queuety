@@ -80,7 +80,7 @@ func (b BadgerDB) checkNotDeliveredMessages() ([]Message, error) {
 			k := item.Key()
 			msg := Message{}
 			err := item.Value(func(v []byte) error {
-				err := json.Unmarshal(v, &messages)
+				err := json.Unmarshal(v, &msg)
 				if err != nil {
 					return err
 				}

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net"
@@ -87,7 +88,7 @@ func Test_Server(t *testing.T) {
 		WithAck(false).
 		Build()
 
-	srv.save(msg)
+	srv.save(context.TODO(), msg)
 
 	time.Sleep(10 * time.Microsecond)
 	err = db.View(func(txn *badger.Txn) error {
