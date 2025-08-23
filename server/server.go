@@ -8,6 +8,8 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
@@ -27,6 +29,9 @@ type Server struct {
 	DB BadgerDB
 
 	listener net.Listener
+
+	webServer    *http.Server
+	sentMessages map[Topic]*atomic.Int32
 }
 
 type Config struct {
@@ -36,6 +41,8 @@ type Config struct {
 	Duration     time.Duration
 	Auth         *Auth
 	InMemoryData bool
+
+	WebServerPort string
 }
 
 type Auth struct {
@@ -68,6 +75,11 @@ func NewServer(c Config) (*Server, error) {
 		DB:       BadgerDB{DB: db},
 		User:     user,
 		Password: pass,
+
+		webServer: &http.Server{
+			Addr: net.JoinHostPort("", c.WebServerPort),
+		},
+		sentMessages: make(map[Topic]*atomic.Int32),
 	}, nil
 }
 
@@ -78,6 +90,13 @@ func (s *Server) Start() error {
 	}
 
 	s.listener = l
+
+	go func() {
+		err = s.StartWebServer()
+		if err != nil {
+			log.Printf("web server failed to start: %v \n", err)
+		}
+	}()
 
 	for {
 		conn, errAccept := l.Accept()
@@ -193,6 +212,9 @@ func (s *Server) sendNewMessage(message Message) {
 
 		fmt.Println("saving message")
 		s.save(message)
+
+		// check if the message was saved
+		s.incSentMessages(message.Topic)
 	}
 }
 
