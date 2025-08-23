@@ -42,7 +42,7 @@ type Config struct {
 	Auth         *Auth
 	InMemoryData bool
 
-	webServerPort string
+	WebServerPort string
 }
 
 type Auth struct {
@@ -77,7 +77,7 @@ func NewServer(c Config) (*Server, error) {
 		Password: pass,
 
 		webServer: &http.Server{
-			Addr: net.JoinHostPort("", c.webServerPort),
+			Addr: net.JoinHostPort("", c.WebServerPort),
 		},
 		sentMessages: make(map[Topic]*atomic.Int32),
 	}, nil
@@ -92,7 +92,12 @@ func (s *Server) Start() error {
 
 	s.listener = l
 
-	// go s.StartWebServer()
+	go func() {
+		err = s.StartWebServer()
+		if err != nil {
+			log.Printf("web server failed to start: %v \n", err)
+		}
+	}()
 
 	for {
 		conn, errAccept := l.Accept()
