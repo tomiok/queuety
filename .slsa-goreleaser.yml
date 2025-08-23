@@ -1,12 +1,50 @@
+# SLSA Go Releaser configuration
+# See https://github.com/slsa-framework/slsa-github-generator/blob/main/internal/builders/go/README.md#configuration-file
+
 version: 1
-flags:
-  - -trimpath
-  - -tags=netgo
-env:
-  - CGO_ENABLED=0
-goos: linux
-goarch: amd64
-binary: queuety
+
+# Path to the main package
 main: ./server/main/main.go  # o ./manager, dependiendo de dónde esté tu main.go
+
+# Binary name
+binary: queuety
+
+# Go version (should match your go.mod)
+go-version: "1.24"
+
+# Environment variables to set during build
+env:
+  - "CGO_ENABLED=0"
+  - "VERSION={{ .Env.VERSION }}"
+  - "COMMIT={{ .Env.COMMIT }}"
+  - "DATE={{ .Env.DATE }}"
+
+# Flags to pass to go build
+flags:
+  - "-trimpath"
+  - "-tags=netgo"
+
+# ldflags to pass to go build
 ldflags:
-  - -s -w
+  - "-s -w"
+  - "-X main.version={{ .Env.VERSION }}"
+  - "-X main.commit={{ .Env.COMMIT }}"
+  - "-X main.date={{ .Env.DATE }}"
+  - "-X main.builtBy=slsa-builder"
+  - "-extldflags=-static"
+
+# Target platforms
+goos:
+  - "linux"
+  - "windows"
+  - "darwin"
+
+goarch:
+  - "amd64"
+  - "arm64"
+
+# Upload to GitHub releases
+upload-assets: true
+
+# Upload tag pattern
+upload-tag-name: "{{ .Tag }}"

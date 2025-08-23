@@ -1,0 +1,140 @@
+# Pre-commit hooks configuration
+# See https://pre-commit.com for more information
+
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ['--multi', '--unsafe']
+      - id: check-json
+      - id: check-toml
+      - id: check-xml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-symlinks
+      - id: check-executables-have-shebangs
+      - id: fix-byte-order-marker
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+      - id: check-docstring-first
+      - id: debug-statements
+
+  # Go specific hooks
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.1
+    hooks:
+      # Run go mod tidy
+      - id: go-mod-tidy
+
+      # Check for common Go mistakes
+      - id: go-vet-mod
+
+      # Run tests
+      - id: go-test-mod
+        args: [-race, -timeout=10m]
+
+      # Build check
+      - id: go-build-mod
+
+  # Go formatting and linting with golangci-lint v2
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v2.4.0
+    hooks:
+      # Format code with golangci-lint fmt
+      - id: golangci-lint-fmt
+        name: golangci-lint-fmt
+        entry: golangci-lint fmt
+        language: golang
+        files: \.go$
+        pass_filenames: false
+        args: ['./...']
+
+      # Full linting
+      - id: golangci-lint
+        name: golangci-lint-full
+        args: [--config=.golangci.yml, --timeout=10m]
+
+  # Security scanning
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: package.lock.json
+
+  # Markdown linting
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.41.0
+    hooks:
+      - id: markdownlint
+        args: ['--fix', '--disable', 'MD013']  # Disable line length rule
+
+  # YAML formatting
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        files: \.(yaml|yml|json|md)$
+        exclude: \.golangci\.yml$  # Exclude golangci config as it has specific formatting
+
+  # Commit message formatting
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args: [optional-scope]
+
+  # Check for common issues in Go code
+  - repo: local
+    hooks:
+      - id: go-no-replacement
+        name: Avoid committing module replacements
+        entry: 'replace\s+.+\s+=>\s+.+'
+        language: pygrep
+        files: go\.mod$
+
+      - id: go-unit-tests
+        name: Go unit tests should be in _test.go files
+        entry: 'func Test.+\(.*testing\.T\)'
+        language: pygrep
+        files: \.go$
+        exclude: _test\.go$
+
+      - id: go-mod-vendor-check
+        name: Check go.mod and go.sum are up to date
+        entry: bash
+        language: system
+        pass_filenames: false
+        args:
+          - -c
+          - |
+            set -e
+            if [ -f go.mod ]; then
+              go mod tidy
+              git diff --exit-code go.mod go.sum
+            fi
+
+# Global configuration
+default_install_hook_types: [pre-commit, commit-msg]
+
+# Minimum pre-commit version
+minimum_pre_commit_version: 2.15.0
+
+# Configuration for specific hooks
+ci:
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit hooks
+
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ''
+  autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
+  autoupdate_schedule: weekly
+  skip: []
+  submodules: false
