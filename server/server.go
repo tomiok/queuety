@@ -1,8 +1,6 @@
 package server
 
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -168,10 +166,11 @@ func (s *Server) handleConnections(conn net.Conn) {
 }
 
 func (s *Server) handleJSON(conn net.Conn, buff []byte) {
-	var msg Message
-	err := json.NewDecoder(bytes.NewReader(buff)).Decode(&msg)
+	msg, err := DecodeMessage(buff)
 	if err != nil {
 		log.Printf("cannot parse message %v \n", err)
+
+		return
 	}
 
 	switch msg.Type() {

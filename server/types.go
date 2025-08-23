@@ -1,9 +1,9 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"time"
 )
 
@@ -67,47 +67,47 @@ type messageJSON struct {
 	Attempts   int             `json:"attempts"`
 }
 
-func (m Message) ID() string {
+func (m *Message) ID() string {
 	return m.id
 }
 
-func (m Message) NextID() string {
+func (m *Message) NextID() string {
 	return m.nextID
 }
 
-func (m Message) Type() MType {
+func (m *Message) Type() MType {
 	return m.mType
 }
 
-func (m Message) User() string {
+func (m *Message) User() string {
 	return m.user
 }
 
-func (m Message) Password() string {
+func (m *Message) Password() string {
 	return m.password
 }
 
-func (m Message) Topic() Topic {
+func (m *Message) Topic() Topic {
 	return m.topic
 }
 
-func (m Message) Body() json.RawMessage {
+func (m *Message) Body() json.RawMessage {
 	return m.body
 }
 
-func (m Message) BodyString() string {
+func (m *Message) BodyString() string {
 	return m.bodyString
 }
 
-func (m Message) Timestamp() int64 {
+func (m *Message) Timestamp() int64 {
 	return m.timestamp
 }
 
-func (m Message) ACK() bool {
+func (m *Message) ACK() bool {
 	return m.ack
 }
 
-func (m Message) Attempts() int {
+func (m *Message) Attempts() int {
 	return m.attempts
 }
 
@@ -150,7 +150,7 @@ func NewMessageBuilder() *messageBuilder {
 	}
 }
 
-func (m Message) Marshall() ([]byte, error) {
+func (m *Message) Marshall() ([]byte, error) {
 	mJSON := messageJSON{
 		ID:         m.id,
 		NextID:     m.nextID,
@@ -188,7 +188,8 @@ func (m *Message) Unmarshal(data []byte) error {
 	return nil
 }
 
-func DecodeMessage(r io.Reader) (Message, error) {
+func DecodeMessage(b []byte) (Message, error) {
+	r := bytes.NewReader(b)
 	var mJSON messageJSON
 	if err := json.NewDecoder(r).Decode(&mJSON); err != nil {
 		return Message{}, err
@@ -208,7 +209,7 @@ func DecodeMessage(r io.Reader) (Message, error) {
 	}, nil
 }
 
-func (m Message) String() string {
+func (m *Message) String() string {
 	return fmt.Sprintf("Message %s, %s, %s at %d", m.mType, m.topic, m.body, m.timestamp)
 }
 
