@@ -1,0 +1,343 @@
+# golangci-lint v2 configuration
+# See https://golangci-lint.run/
+
+# See the dedicated "version" documentation section.
+version: "2"
+
+# Options for analysis running.
+run:
+  timeout: 5m
+  issues-exit-code: 1
+  tests: true
+  skip-dirs:
+    - vendor
+    - .git
+  skip-files:
+    - ".*\\.pb\\.go$"
+    - ".*_gen\\.go$"
+  go: "1.22"
+
+# See the dedicated "linters" documentation section.
+linters:
+  disable-all: true
+  enable:
+    # Enabled by default
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose
+    - contextcheck
+    - dupl
+    - durationcheck
+    - errorlint
+    - exhaustive
+    - funlen
+    - gochecknoinits
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - godox
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - importas
+    - ireturn
+    - lll
+    - makezero
+    - misspell
+    - nakedret
+    - nilerr
+    - nilnil
+    - noctx
+    - nolintlint
+    - prealloc
+    - predeclared
+    - promlinter
+    - revive
+    - tagliatelle
+    - testpackage
+    - thelper
+    - unconvert
+    - unused
+    - unparam
+    - varnamelen
+    - wastedassign
+    - whitespace
+    - mnd         # replaces gomnd (magic number detector)
+
+  # Configuration for specific linters
+  settings:
+    govet:
+      check-shadowing: true
+      enable-all: true
+      disable:
+        - fieldalignment # can be too strict for readability
+
+    gocyclo:
+      min-complexity: 15
+
+    goconst:
+      min-len: 2
+      min-occurrences: 3
+
+    misspell:
+      locale: US
+
+    lll:
+      line-length: 120
+
+    unparam:
+      check-exported: false
+
+    nakedret:
+      max-func-lines: 30
+
+    prealloc:
+      simple: true
+      range-loops: true
+      for-loops: false
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+      disabled-checks:
+        - dupImport # https://github.com/go-critic/go-critic/issues/845
+        - ifElseChain
+        - octalLiteral
+        - whyNoLint
+
+    funlen:
+      lines: 100
+      statements: 50
+
+    godox:
+      keywords:
+        - NOTE
+        - OPTIMIZE
+        - HACK
+
+    errorlint:
+      errorf: true
+      asserts: true
+      comparison: true
+
+    exhaustive:
+      check-generated: false
+      default-signifies-exhaustive: false
+
+    godot:
+      scope: declarations
+      exclude:
+        - "^fixme:"
+        - "^todo:"
+      period: true
+      capital: false
+
+    # Renamed from gomnd to mnd
+    mnd:
+      checks: argument,case,condition,operation,return,assign
+      ignored-numbers: 0,1,2,3
+      ignored-functions: strings.SplitN
+
+    gomodguard:
+      allowed:
+        modules: []
+        domains: []
+      blocked:
+        modules: []
+        versions: []
+
+    gosec:
+      includes:
+        - G401
+        - G306
+        - G101
+      excludes:
+        - G204 # Subprocess launched with variable
+      exclude-generated: true
+      severity: "low"
+      confidence: "low"
+
+    importas:
+      no-unaliased: true
+      alias: []
+
+    ireturn:
+      allow:
+        - anon
+        - error
+        - empty
+        - stdlib
+
+    nilnil:
+      checked-types:
+        - ptr
+        - func
+        - iface
+        - map
+        - chan
+
+    nolintlint:
+      allow-leading-space: true
+      allow-unused: false
+      require-explanation: false
+      require-specific: false
+
+    revive:
+      min-confidence: 0.8
+      rules:
+        - name: atomic
+        - name: line-length-limit
+          arguments: [140]
+        - name: time-naming
+        - name: var-declaration
+        - name: unexported-return
+        - name: errorf
+        - name: blank-imports
+        - name: context-as-argument
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: if-return
+        - name: increment-decrement
+        - name: var-naming
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: indent-error-flow
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: unused-parameter
+
+    staticcheck:
+      checks: ["all"]
+
+    tagliatelle:
+      case:
+        rules:
+          json: snake
+          yaml: camel
+          xml: camel
+          bson: camel
+          avro: snake
+          mapstructure: kebab
+
+    testpackage:
+      skip-regexp: (export|internal)_test\.go
+
+    thelper:
+      test:
+        first: true
+        name: true
+        begin: true
+      benchmark:
+        first: true
+        name: true
+        begin: true
+      tb:
+        first: true
+        name: true
+        begin: true
+
+    varnamelen:
+      min-name-length: 1
+      ignore-type-assert-ok: true
+      ignore-map-index-ok: true
+      ignore-chan-recv-ok: true
+      ignore-names:
+        - err
+        - ok
+        - id
+        - i
+        - j
+        - k
+        - v
+        - t
+        - x
+        - y
+
+# See the dedicated "formatters" documentation section.
+formatters:
+  gofumpt:
+    command: gofumpt
+    args: ["-w"]
+    lang-version: "1.22"
+    extra-rules: true
+
+  goimports:
+    command: goimports
+    args: ["-w", "-local", "github.com/tomiok/queuety"]
+
+# See the dedicated "issues" documentation section.
+issues:
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - funlen
+        - goconst
+        - gocognit
+        - mnd  # updated from gomnd
+        - lll
+
+    # Exclude some staticcheck messages
+    - linters:
+        - staticcheck
+      text: "SA9003:"
+
+    # Exclude lll issues for long lines with go:generate
+    - linters:
+        - lll
+      source: "^//go:generate "
+
+  # Show only new issues: if there are unstaged changes or untracked files,
+  # only those changes are analyzed, else only changes in HEAD~ are analyzed.
+  new: false
+
+  # Fix found issues (if it's supported by the linter)
+  fix: false
+
+  # Maximum issues count per one linter. Set to 0 to disable. Default is 50.
+  max-issues-per-linter: 0
+
+  # Maximum count of issues with the same text. Set to 0 to disable. Default is 3.
+  max-same-issues: 0
+
+# Output configuration options.
+output:
+  formats:
+    colored-line-number:
+      path: stdout
+  print-issued-lines: true
+  print-linter-name: true
+  uniq-by-line: true
+  sort-results: true
+
+# See the dedicated "severity" documentation section.
+severity:
+  default: error
+  case-sensitive: false
+  rules:
+    - linters:
+        - dupl
+      severity: info
+    - linters:
+        - gocritic
+      severity: warning
+    - linters:
+        - godox
+      severity: info

@@ -1,0 +1,108 @@
+# SLSA3 compliant release workflow
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+# This workflow lets you compile your Go project using a SLSA3 compliant builder.
+# This workflow will generate a so-called "provenance" file describing the steps
+# that were performed to generate the final binary.
+# The project is an initiative of the OpenSSF (openssf.org) and is developed at
+# https://github.com/slsa-framework/slsa-github-generator.
+# The provenance file can be verified using https://github.com/slsa-framework/slsa-verifier.
+# For more information about SLSA and how it improves the supply-chain, visit slsa.dev.
+
+name: SLSA Go Releaser
+
+on:
+  workflow_dispatch:
+  release:
+    types: [created]
+  push:
+    tags:
+      - 'v*'
+
+permissions: read-all
+
+jobs:
+  # Run CI checks before SLSA build
+  pre-build-checks:
+    name: Pre-build Quality Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.4.0
+
+      - name: Check formatting
+        run: |
+          cp -r . /tmp/format-check
+          cd /tmp/format-check
+          $(go env GOPATH)/bin/golangci-lint fmt ./...
+          if ! diff -r . /tmp/format-check > /dev/null 2>&1; then
+            echo "Code formatting issues found. Please run 'make format'"
+            exit 1
+          fi
+
+      - name: Run linter
+        run: $(go env GOPATH)/bin/golangci-lint run --config .golangci.yml --timeout 10m
+
+      - name: Run tests
+        run: go test -race -v ./...
+
+      - name: Verify dependencies
+        run: go mod verify
+
+  # ========================================================================================================================================
+  #     Prerequisite: Create a .slsa-goreleaser.yml in the root directory of your project.
+  #       See format in https://github.com/slsa-framework/slsa-github-generator/blob/main/internal/builders/go/README.md#configuration-file
+  #=========================================================================================================================================
+  build:
+    name: SLSA3 Build
+    needs: pre-build-checks
+    permissions:
+      id-token: write # To sign the provenance.
+      contents: write # To upload release assets.
+      actions: read   # To read the workflow path.
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.0.0
+    with:
+      go-version: "1.24"  # Use stable Go version
+      config-file: .slsa-goreleaser.yml
+      evaluated-envs: "VERSION:${{github.ref_name}},COMMIT:${{github.sha}},DATE:${{github.event.repository.updated_at}}"
+      compile-builder: true
+      # =============================================================================================================
+      #     Optional: For more options, see https://github.com/slsa-framework/slsa-github-generator#golang-projects
+      # =============================================================================================================
+
+  # Upload provenance to release
+  upload-provenance:
+    name: Upload Provenance
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - name: Download provenance
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.build.outputs.go-provenance-name }}
+
+      - name: Upload provenance to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ needs.build.outputs.go-provenance-name }}
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
