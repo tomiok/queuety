@@ -53,7 +53,6 @@ graph TD
 
 - **`.golangci.yml`** - Linting and formatting rules
 - **`.slsa-goreleaser.yml`** - SLSA build configuration
-- **`.pre-commit-config.yaml`** - Pre-commit hooks
 - **`Makefile`** - Local development commands
 
 ## 🏃‍♂️ Development Workflow
@@ -103,7 +102,6 @@ Use the Makefile for local development:
 ```bash
 # Setup tools
 make install-tools
-make precommit-install
 
 # Development cycle
 make dev              # format + lint + test
@@ -132,4 +130,3 @@ Monitor workflow status:
 - [SLSA GitHub Generator](https://github.com/slsa-framework/slsa-github-generator)
 - [SLSA Verifier](https://github.com/slsa-framework/slsa-verifier)
 - [golangci-lint Documentation](https://golangci-lint.run/)
-- [Pre-commit Framework](https://pre-commit.com/)

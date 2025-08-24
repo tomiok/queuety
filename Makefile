@@ -14,7 +14,6 @@ VERSION=latest
 
 # Linting and formatting tools
 GOLANGCI_LINT_VERSION=v2.4.0
-PRE_COMMIT_VERSION=3.8.0
 
 # Colors for output
 RED=\033[0;31m
@@ -25,11 +24,10 @@ NC=\033[0m # No Color
 PRINT=printf
 
 .PHONY: all build clean test coverage help
-.PHONY: install-tools install-linters install-formatters install-precommit
+.PHONY: install-tools install-linters install-formatters
 .PHONY: lint lint-fix format format-check
 .PHONY: deps deps-update deps-verify deps-clean
 .PHONY: ci-setup ci-lint ci-test ci-build
-.PHONY: precommit-install precommit-run
 .PHONY: run stop logs restart shell docker-build docker-run
 
 # Default target
@@ -97,7 +95,7 @@ deps-clean: ## Clean module cache
 	$(GOCMD) clean -modcache
 
 ## Installation of tools
-install-tools: install-linters install-formatters install-precommit ## Install all development tools
+install-tools: install-linters install-formatters ## Install all development tools
 
 install-linters: ## Install golangci-lint
 	@$(PRINT) "$(BLUE)Installing golangci-lint $(GOLANGCI_LINT_VERSION)...$(NC)\n"
@@ -112,11 +110,6 @@ install-formatters: ## Install gofumpt and goimports
 	@command -v gofumpt >/dev/null 2>&1 || go install mvdan.cc/gofumpt@latest
 	@command -v goimports >/dev/null 2>&1 || go install golang.org/x/tools/cmd/goimports@latest
 	@$(PRINT) "$(GREEN)Formatters installed (gofumpt, goimports)$(NC)\n"
-
-install-precommit: ## Install pre-commit
-	@$(PRINT) "$(BLUE)Installing pre-commit...$(NC)\n"
-	@command -v pre-commit >/dev/null 2>&1 || pip3 install pre-commit==$(PRE_COMMIT_VERSION)
-	@$(PRINT) "$(GREEN)pre-commit installed$(NC)\n"
 
 ## Linting and Formatting
 lint: ## Run golangci-lint
@@ -145,21 +138,6 @@ format-check: ## Check if code is formatted
 	else \
 		$(PRINT) "$(GREEN)All files are properly formatted$(NC)\n"; \
 	fi
-
-## Pre-commit hooks
-precommit-install: install-precommit ## Install pre-commit hooks
-	@$(PRINT) "$(BLUE)Installing pre-commit hooks...$(NC)\n"
-	pre-commit install
-	pre-commit install --hook-type commit-msg
-	@$(PRINT) "$(GREEN)Pre-commit hooks installed$(NC)\n"
-
-precommit-run: ## Run pre-commit on all files
-	@$(PRINT) "$(BLUE)Running pre-commit on all files...$(NC)\n"
-	pre-commit run --all-files
-
-precommit-update: ## Update pre-commit hooks
-	@$(PRINT) "$(BLUE)Updating pre-commit hooks...$(NC)\n"
-	pre-commit autoupdate
 
 ## CI/CD targets
 ci-setup: install-tools ## Setup CI environment
@@ -242,7 +220,6 @@ env: ## Show Go environment
 tools-version: ## Show tools versions
 	@$(PRINT) "$(BLUE)Tools versions:$(NC)\n"
 	@command -v golangci-lint >/dev/null 2>&1 && golangci-lint version || $(PRINT) "$(RED)golangci-lint not installed$(NC)\n"
-	@command -v pre-commit >/dev/null 2>&1 && pre-commit --version || $(PRINT) "$(RED)pre-commit not installed$(NC)\n"
 	@command -v gofumpt >/dev/null 2>&1 && gofumpt --version || $(PRINT) "$(RED)gofumpt not installed$(NC)\n"
 	@command -v goimports >/dev/null 2>&1 && $(PRINT) "goimports installed\n" || $(PRINT) "$(RED)goimports not installed$(NC)\n"
 
@@ -261,7 +238,6 @@ help: ## Show this help message
 	@$(PRINT) "  $(BLUE)make format-check$(NC)   - Check if code is formatted\n\n"
 	@$(PRINT) "$(YELLOW)Setup:$(NC)\n"
 	@$(PRINT) "  $(BLUE)make install-tools$(NC)  - Install all development tools\n"
-	@$(PRINT) "  $(BLUE)make precommit-install$(NC) - Setup git pre-commit hooks\n\n"
 	@awk 'BEGIN {FS = ":.*##"; printf "\n$(YELLOW)All available targets:$(NC)\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  $(BLUE)%-20s$(NC) %s\n", $$1, $$2 } /^##@/ { printf "\n$(YELLOW)%s$(NC)\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
 # Check if tools are installed
