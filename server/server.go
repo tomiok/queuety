@@ -1,16 +1,20 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/dgraph-io/badger/v4"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/tomiok/queuety/server/observability"
 )
 
 type Server struct {
@@ -30,6 +34,10 @@ type Server struct {
 
 	webServer    *http.Server
 	sentMessages map[Topic]*atomic.Int32
+
+	// Campos para rastrear conexiones activas
+	mu                sync.Mutex
+	activeConnections int
 }
 
 type Config struct {
@@ -144,6 +152,20 @@ func (s *Server) printStats() {
 }
 
 func (s *Server) handleConnections(conn net.Conn) {
+	// Incrementar contador de conexiones
+	s.mu.Lock()
+	s.activeConnections++
+	observability.UpdateActiveConnectionsCount(s.activeConnections)
+	s.mu.Unlock()
+
+	defer func() {
+		// Decrementar contador de conexiones al finalizar
+		s.mu.Lock()
+		s.activeConnections--
+		observability.UpdateActiveConnectionsCount(s.activeConnections)
+		s.mu.Unlock()
+	}()
+
 	for {
 		buff := make([]byte, 2048)
 
@@ -166,25 +188,37 @@ func (s *Server) handleConnections(conn net.Conn) {
 }
 
 func (s *Server) handleJSON(conn net.Conn, buff []byte) {
+	startTime := time.Now()
 	msg, err := DecodeMessage(buff)
 	if err != nil {
 		log.Printf("cannot parse message %v \n", err)
-
 		return
 	}
 
+	var operation string
 	switch msg.Type() {
 	case MessageTypeNewTopic:
+		operation = "new_topic"
 		s.addNewTopic(msg.Topic().Name)
 	case MessageTypeNew:
+		operation = "new_message"
 		s.sendNewMessage(msg)
 	case MessageTypeNewSubscriber:
+		operation = "new_subscriber"
 		s.addNewSubscriber(conn, msg.Topic())
 	case MessageTypeACK:
+		operation = "ack"
 		s.ack(msg)
 	case MessageTypeAuth:
+		operation = "auth"
 		s.doLogin(conn, msg)
+	default:
+		operation = "unknown"
 	}
+
+	// Observar tiempo de procesamiento
+	processingTime := time.Since(startTime).Seconds()
+	observability.ObserveMessageProcessingTime(msg.Topic().Name, operation, processingTime)
 }
 
 func (s *Server) sendNewMessage(message Message) {
@@ -193,6 +227,9 @@ func (s *Server) sendNewMessage(message Message) {
 		log.Printf("topic not found, actual name: %s, values in memory: %v", message.Topic().Name, s.clients)
 		return
 	}
+
+	// Incrementar métrica de mensajes publicados
+	observability.IncrementPublishedMessages(message.Topic().Name)
 
 	// write for all the clients/connections
 	for _, conn := range clients {
@@ -205,9 +242,16 @@ func (s *Server) sendNewMessage(message Message) {
 		_, err = conn.Write(b)
 		if err != nil {
 			log.Printf("cannot write in connection: %v message\n", err)
+
+			// Incrementar métrica de mensajes fallidos
+			observability.IncrementFailedMessages(message.Topic().Name)
+
 			saveUnsentMessage(message, s.save)
 			return
 		}
+
+		// Incrementar métrica de mensajes entregados
+		observability.IncrementDeliveredMessages(message.Topic().Name)
 
 		fmt.Println("saving message")
 		s.save(message)
@@ -238,6 +282,9 @@ func (s *Server) doLogin(conn net.Conn, message Message) {
 			_ = conn.Close()
 		}
 		_, _ = conn.Write(b)
+
+		// Incrementar métrica de intento de autenticación fallido
+		observability.IncrementAuthAttempt("failed")
 		return
 	}
 
@@ -248,6 +295,9 @@ func (s *Server) doLogin(conn net.Conn, message Message) {
 		_ = conn.Close()
 	}
 	_, _ = conn.Write(b)
+
+	// Incrementar métrica de intento de autenticación exitoso
+	observability.IncrementAuthAttempt("success")
 	return
 }
 
@@ -276,10 +326,16 @@ func (s *Server) save(message Message) {
 
 func (s *Server) addNewSubscriber(conn net.Conn, topic Topic) {
 	s.clients[topic] = append(s.clients[topic], conn)
+
+	// Actualizar métrica de suscriptores por tema
+	observability.UpdateSubscribersCount(topic.Name, len(s.clients[topic]))
 }
 
 func (s *Server) addNewTopic(name string) {
 	s.clients[NewTopic(name)] = []net.Conn{}
+
+	// Actualizar métrica de temas activos
+	observability.UpdateActiveTopicsCount(len(s.clients))
 }
 
 func (s *Server) ack(message Message) {
@@ -294,6 +350,9 @@ func (s *Server) disconnect(conn net.Conn) {
 			if client == conn {
 				s.clients[topic] = append(clients[:i], clients[i+1:]...)
 				log.Printf("client removed in topic: %s", topic.Name)
+
+				// Actualizar métrica de suscriptores por tema
+				observability.UpdateSubscribersCount(topic.Name, len(s.clients[topic]))
 				break
 			}
 		}
@@ -308,9 +367,39 @@ func (s *Server) disconnect(conn net.Conn) {
 	if err != nil {
 		log.Printf("cannot close deleted connection %v", err)
 	}
+
+	// Actualizar métrica de temas activos
+	observability.UpdateActiveTopicsCount(len(s.clients))
 }
 
 func saveUnsentMessage(msg Message, saveFn func(m Message)) {
 	msg.IncAttempts()
 	saveFn(msg)
+}
+
+func (s *Server) StartWebServer() error {
+	mux := http.NewServeMux()
+
+	// Configurar el endpoint de métricas de Prometheus
+	mux.Handle("/metrics", promhttp.Handler())
+
+	// Agregar endpoint de stats
+	mux.HandleFunc("/stats", s.handleStats)
+
+	s.webServer.Handler = mux
+
+	// Iniciar el servidor web
+	log.Printf("Starting web server on %s", s.webServer.Addr)
+	return s.webServer.ListenAndServe()
+}
+
+func (s *Server) ShutdownWebServer() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := s.webServer.Shutdown(ctx); err != nil {
+		return err
+	}
+
+	return nil
 }

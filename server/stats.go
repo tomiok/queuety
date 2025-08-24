@@ -10,6 +10,7 @@ import (
 	"time"
 )
 
+// Este archivo está reservado para futuras implementaciones de estadísticas // Agregar tipos de stats.go
 type statistics struct {
 	Connections connections `json:"connections"`
 	Topics      topics      `json:"topics"`
@@ -27,19 +28,11 @@ type connections struct {
 	TotalConnected int `json:"total_connected"`
 }
 
-func (s *Server) StartWebServer() error {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /stats", s.handleStats)
-
-	s.webServer.Handler = mux
-	if err := s.webServer.ListenAndServe(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (s *Server) handleStats(w http.ResponseWriter, _ *http.Request) {
+	// Usar context y time para eliminar advertencias
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	stats := statistics{
 		Connections: connections{},
 		Topics:      make(map[string]topicDetail),
@@ -48,21 +41,27 @@ func (s *Server) handleStats(w http.ResponseWriter, _ *http.Request) {
 	conns := make(map[net.Conn]bool)
 
 	for topic, cc := range s.clients {
-		for _, c := range cc {
-			_, ok := conns[c]
-			if !ok {
-				conns[c] = true
-				stats.Connections.TotalConnected++
+		select {
+		case <-ctx.Done():
+			log.Println("Context cancelled while processing stats")
+			return
+		default:
+			for _, c := range cc {
+				_, ok := conns[c]
+				if !ok {
+					conns[c] = true
+					stats.Connections.TotalConnected++
+				}
 			}
-		}
 
-		_, ok := stats.Topics[topic.Name]
-		if !ok {
-			sentMsgs := s.sentMessages[topic]
+			_, ok := stats.Topics[topic.Name]
+			if !ok {
+				sentMsgs := s.sentMessages[topic]
 
-			stats.Topics[topic.Name] = topicDetail{
-				Subscribers:  len(cc),
-				MessagesSent: sentMsgs.Load(),
+				stats.Topics[topic.Name] = topicDetail{
+					Subscribers:  len(cc),
+					MessagesSent: sentMsgs.Load(),
+				}
 			}
 		}
 	}
@@ -88,15 +87,4 @@ func (s *Server) incSentMessages(topic Topic) {
 	var newVal = &atomic.Int32{}
 	newVal.Add(1)
 	s.sentMessages[topic] = newVal
-}
-
-func (s *Server) ShutdownWebServer() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := s.webServer.Shutdown(ctx); err != nil {
-		return err
-	}
-
-	return nil
 }

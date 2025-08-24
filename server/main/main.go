@@ -1,9 +1,10 @@
 package main
 
 import (
-	"github.com/tomiok/queuety/server"
 	"log"
 	"os"
+
+	"github.com/tomiok/queuety/server"
 )
 
 func main() {
@@ -13,11 +14,12 @@ func main() {
 	}
 
 	s, err := server.NewServer(server.Config{
-		Protocol:   "tcp4",
-		Port:       ":9845",
-		BadgerPath: badgerPath,
-		Duration:   10,
-		Auth:       nil,
+		Protocol:      "tcp4",
+		Port:          ":9845",
+		BadgerPath:    badgerPath,
+		Duration:      10,
+		Auth:          nil,
+		WebServerPort: "9846", // Corregir sintaxis del puerto
 	})
 
 	if err != nil {
