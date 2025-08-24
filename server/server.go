@@ -63,6 +63,10 @@ func NewServer(c Config) (*Server, error) {
 		pass = c.Auth.Password
 	}
 
+	if c.WebServerPort == "" {
+		c.WebServerPort = ":9846"
+	}
+
 	return &Server{
 		protocol: c.Protocol,
 		port:     c.Port,
@@ -74,7 +78,7 @@ func NewServer(c Config) (*Server, error) {
 		Password: pass,
 
 		webServer: &http.Server{
-			Addr: net.JoinHostPort("", "9846"),
+			Addr: c.WebServerPort,
 		},
 		sentMessages: make(map[Topic]*atomic.Int32),
 	}, nil
