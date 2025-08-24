@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -54,6 +55,9 @@ func Test_Server(t *testing.T) {
 		DB: BadgerDB{
 			DB: db,
 		},
+		webServer: &http.Server{
+			Addr: ":60124",
+		},
 		listener: nil,
 	}
 
@@ -77,7 +81,7 @@ func Test_Server(t *testing.T) {
 	id := uuid.NewString()
 	nextID := uuid.NewString()
 
-	msg := NewMessageBuilder().
+	__msg := NewMessageBuilder().
 		WithID("false-" + id).
 		WithNextID(nextID).
 		WithType(MessageTypeNew).
@@ -87,7 +91,7 @@ func Test_Server(t *testing.T) {
 		WithAck(false).
 		Build()
 
-	srv.save(msg)
+	srv.save(__msg)
 
 	time.Sleep(10 * time.Microsecond)
 	err = db.View(func(txn *badger.Txn) error {

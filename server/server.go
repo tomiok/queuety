@@ -74,7 +74,7 @@ func NewServer(c Config) (*Server, error) {
 		Password: pass,
 
 		webServer: &http.Server{
-			Addr: net.JoinHostPort("", c.WebServerPort),
+			Addr: net.JoinHostPort("", "9846"),
 		},
 		sentMessages: make(map[Topic]*atomic.Int32),
 	}, nil
