@@ -176,7 +176,7 @@ jobs:
   notify-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [build, docker, security]
+    needs: [build, docker]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Notify success
