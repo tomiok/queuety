@@ -2,7 +2,6 @@ package server
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"log"
 	"net"
@@ -127,7 +126,6 @@ func (s *Server) printStats() {
 				for it.Rewind(); it.Valid(); it.Next() {
 					item := it.Item()
 					err := item.Value(func(v []byte) error {
-						fmt.Printf("value=%s\n", v)
 						return nil
 					})
 					if err != nil {
@@ -209,7 +207,6 @@ func (s *Server) sendNewMessage(message Message) {
 			return
 		}
 
-		fmt.Println("saving message")
 		s.save(message)
 
 		// check if the message was saved
@@ -218,7 +215,6 @@ func (s *Server) sendNewMessage(message Message) {
 }
 
 func (s *Server) doLogin(conn net.Conn, message Message) {
-	fmt.Println(s)
 	if !s.needAuth() {
 		message.updateAuthSuccess() // no auth need means successful.
 		b, err := message.Marshall()
