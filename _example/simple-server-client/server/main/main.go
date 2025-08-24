@@ -7,11 +7,12 @@ import (
 
 func main() {
 	s, err := server.NewServer(server.Config{
-		Protocol:   "tcp",
-		Port:       ":9845",
-		BadgerPath: "/tmp/data",
-		Duration:   10,
-		Auth:       nil,
+		Protocol:      "tcp",
+		Port:          ":9845",
+		BadgerPath:    "/tmp/data",
+		WebServerPort: ":9846",
+		Duration:      10,
+		Auth:          nil,
 	})
 
 	if err != nil {

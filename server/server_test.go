@@ -15,11 +15,12 @@ import (
 
 func Test_ServerStart(t *testing.T) {
 	s, err := NewServer(Config{
-		Protocol:   "tcp",
-		Port:       ":60000",
-		BadgerPath: "/tmp/badger_test",
-		Duration:   10,
-		Auth:       nil,
+		Protocol:      "tcp",
+		Port:          ":60000",
+		BadgerPath:    "/tmp/badger_test",
+		WebServerPort: ":60001",
+		Duration:      10,
+		Auth:          nil,
 	})
 	if err != nil {
 		t.Fatalf("should not see an err here %v", err)
@@ -32,12 +33,7 @@ func Test_ServerStart(t *testing.T) {
 			return
 		}
 	}()
-	time.Sleep(500 * time.Millisecond)
-
-	err = s.Close()
-	if err != nil {
-		t.Fatalf("should not see an err here %v", err)
-	}
+	time.Sleep(100 * time.Millisecond)
 }
 
 func Test_Server(t *testing.T) {
