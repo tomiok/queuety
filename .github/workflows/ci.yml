@@ -53,9 +53,13 @@ jobs:
       - name: Verify dependencies
         run: go mod verify
 
+      - name: Install test dependencies
+        run: |
+          go install gotest.tools/gotestsum@latest
+
       - name: Run tests
         run: |
-          go test -race -coverprofile=coverage.out -covermode=atomic ./...
+          gotestsum --format testname -- -race -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: Upload coverage to Codecov
         if: matrix.go-version == env.GO_VERSION
@@ -85,13 +89,21 @@ jobs:
         run: go mod download
 
       - name: Build binary
-        run: go build -v ./...
-
-      - name: Build specific binary
-        run: go build -o queuety ./cmd/queuety
+        run: |
+          go build -v -ldflags="-s -w" -o queuety ./main.go
 
       - name: Test binary execution
-        run: ./queuety --help || echo "Binary built successfully"
+        run: |
+          chmod +x queuety
+          ./queuety --help || true
+          echo "✅ Binary built successfully"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: queuety-binary
+          path: queuety
+          retention-days: 7
 
   # Docker build and test
   docker:
@@ -105,13 +117,6 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Docker Hub (if needed)
-        if: github.ref == 'refs/heads/main'
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Extract metadata
         id: meta
@@ -136,7 +141,32 @@ jobs:
 
       - name: Test Docker image
         run: |
-          docker run --rm queuety:latest --help || echo "Docker image built successfully"
+          docker run --rm queuety:latest --help || true
+          echo "✅ Docker image built successfully"
+
+  # Security scan
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run Gosec Security Scanner
+        uses: securecodewarrior/github-action-gosec@master
+        with:
+          args: './...'
+
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
 
   # Dependency review (only on PRs)
   dependency-review:
@@ -150,14 +180,20 @@ jobs:
       - name: Dependency Review
         uses: actions/dependency-review-action@v4
 
-  # Notification for successful CI (optional)
-  notify-success:
+  # Final success notification
+  ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [build, docker]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build, docker, security]
+    if: success()
     steps:
-      - name: Notify success
+      - name: Success notification
         run: |
-          echo "✅ All CI checks passed successfully!"
-          echo "🚀 Ready for release when tagged"
+          echo "🎉 All CI checks passed successfully!"
+          echo "✅ Linting: PASSED"
+          echo "✅ Tests: PASSED" 
+          echo "✅ Build: PASSED"
+          echo "✅ Docker: PASSED"
+          echo "✅ Security: PASSED"
+          echo ""
+          echo "🚀 Ready for deployment!"
