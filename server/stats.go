@@ -1,13 +1,11 @@
 package server
 
 import (
-	"context"
 	"encoding/json"
 	"log"
 	"net"
 	"net/http"
 	"sync/atomic"
-	"time"
 )
 
 type statistics struct {
@@ -25,18 +23,6 @@ type topicDetail struct {
 type connections struct {
 	Active         int `json:"active"`
 	TotalConnected int `json:"total_connected"`
-}
-
-func (s *Server) StartWebServer() error {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /stats", s.handleStats)
-
-	s.webServer.Handler = mux
-	if err := s.webServer.ListenAndServe(); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (s *Server) handleStats(w http.ResponseWriter, _ *http.Request) {
@@ -88,15 +74,4 @@ func (s *Server) incSentMessages(topic Topic) {
 	var newVal = &atomic.Int32{}
 	newVal.Add(1)
 	s.sentMessages[topic] = newVal
-}
-
-func (s *Server) ShutdownWebServer() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := s.webServer.Shutdown(ctx); err != nil {
-		return err
-	}
-
-	return nil
 }
