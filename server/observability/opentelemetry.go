@@ -35,8 +35,8 @@ func InitOpenTelemetry(ctx context.Context) error {
 	)
 
 	// Obtener endpoints de las variables de entorno
-	grpcEndpoint := os.Getenv("OTEL_OTLP_GRPC_ENDPOINT")
-	httpEndpoint := os.Getenv("OTEL_OTLP_HTTP_ENDPOINT")
+	grpcEndpoint := os.Getenv("QUEUETY_OTEL_OTLP_GRPC_ENDPOINT")
+	httpEndpoint := os.Getenv("QUEUETY_OTEL_OTLP_HTTP_ENDPOINT")
 
 	// Prioridad: si hay endpoint gRPC, se usa gRPC
 	if grpcEndpoint != "" {
