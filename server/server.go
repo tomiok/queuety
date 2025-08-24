@@ -8,6 +8,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -380,8 +381,12 @@ func saveUnsentMessage(msg Message, saveFn func(m Message)) {
 func (s *Server) StartWebServer() error {
 	mux := http.NewServeMux()
 
-	// Configurar el endpoint de métricas de Prometheus
-	mux.Handle("/metrics", promhttp.Handler())
+	// Verificar variable de entorno para métricas de Prometheus
+	metricsEnabled := os.Getenv("QUEUETY_METRICS_ENABLED")
+	if metricsEnabled == "" || metricsEnabled == "true" {
+		// Configurar el endpoint de métricas de Prometheus solo si está habilitado
+		mux.Handle("/metrics", promhttp.Handler())
+	}
 
 	// Agregar endpoint de stats
 	mux.HandleFunc("/stats", s.handleStats)
