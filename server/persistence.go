@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/tomiok/queuety/server/observability"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type BadgerDB struct {
@@ -28,8 +30,23 @@ func NewBadger(path string, inMemory bool) (*badger.DB, error) {
 // saveMessage will store the message at the first time, the id should start with false since is the
 // 1st time we are storing the message.
 func (b BadgerDB) saveMessage(message Message) error {
+	// Iniciar span para operación de guardar mensaje
+	_, span := observability.StartSpan(
+		context.Background(),
+		"badger_save_message",
+		observability.WithSpanKind(trace.SpanKindInternal),
+	)
+	defer observability.EndSpan(span, nil)
+
+	// Añadir atributos al span
+	observability.AddSpanAttributes(span,
+		observability.StringAttribute("message.id", message.ID()),
+		observability.StringAttribute("topic.name", message.Topic().Name),
+	)
+
 	if !strings.HasPrefix(message.ID(), MsgPrefixFalse) {
 		observability.IncrementBadgerOperation("saveMessage", "error")
+		observability.EndSpan(span, errors.New("invalid key, should start with 'false'"))
 		return errors.New("invalid key, should start with 'false'")
 	}
 
@@ -38,12 +55,14 @@ func (b BadgerDB) saveMessage(message Message) error {
 		msgBytes, err := message.Marshall()
 		if err != nil {
 			observability.IncrementBadgerOperation("saveMessage", "error")
+			observability.EndSpan(span, err)
 			return err
 		}
 
 		err = txn.Set([]byte(message.ID()), msgBytes)
 		if err != nil {
 			observability.IncrementBadgerOperation("saveMessage", "error")
+			observability.EndSpan(span, err)
 			return err
 		}
 
@@ -54,29 +73,47 @@ func (b BadgerDB) saveMessage(message Message) error {
 		observability.IncrementBadgerOperation("saveMessage", "success")
 	} else {
 		observability.IncrementBadgerOperation("saveMessage", "error")
+		observability.EndSpan(span, err)
 	}
 
 	return err
 }
 
 func (b BadgerDB) updateMessageACK(message Message) error {
+	// Iniciar span para operación de actualizar ACK
+	_, span := observability.StartSpan(
+		context.Background(),
+		"badger_update_message_ack",
+		observability.WithSpanKind(trace.SpanKindInternal),
+	)
+	defer observability.EndSpan(span, nil)
+
+	// Añadir atributos al span
+	observability.AddSpanAttributes(span,
+		observability.StringAttribute("message.id", message.ID()),
+		observability.StringAttribute("topic.name", message.Topic().Name),
+	)
+
 	err := b.DB.Update(func(txn *badger.Txn) error {
 		// delete entry with old key.
 		if err := txn.Delete([]byte(message.ID())); err != nil {
 			log.Printf("cannot delete message with ID %s", message.ID())
 			observability.IncrementBadgerOperation("updateMessageACK", "error")
+			observability.EndSpan(span, err)
 		}
 
 		message.updateACK()
 		msgBytes, err := message.Marshall()
 		if err != nil {
 			observability.IncrementBadgerOperation("updateMessageACK", "error")
+			observability.EndSpan(span, err)
 			return err
 		}
 
 		err = txn.Set([]byte(message.ID()), msgBytes)
 		if err != nil {
 			observability.IncrementBadgerOperation("updateMessageACK", "error")
+			observability.EndSpan(span, err)
 			return err
 		}
 
@@ -87,13 +124,23 @@ func (b BadgerDB) updateMessageACK(message Message) error {
 		observability.IncrementBadgerOperation("updateMessageACK", "success")
 	} else {
 		observability.IncrementBadgerOperation("updateMessageACK", "error")
+		observability.EndSpan(span, err)
 	}
 
 	return err
 }
 
 func (b BadgerDB) checkNotDeliveredMessages() ([]Message, error) {
+	// Iniciar span para operación de verificar mensajes no entregados
+	_, span := observability.StartSpan(
+		context.Background(),
+		"badger_check_not_delivered_messages",
+		observability.WithSpanKind(trace.SpanKindInternal),
+	)
+	defer observability.EndSpan(span, nil)
+
 	var messages []Message
+	topicsChecked := make(map[string]bool)
 	err := b.View(func(txn *badger.Txn) error {
 		it := txn.NewIterator(badger.DefaultIteratorOptions)
 		defer it.Close()
@@ -106,12 +153,16 @@ func (b BadgerDB) checkNotDeliveredMessages() ([]Message, error) {
 				err := json.Unmarshal(v, &msg)
 				if err != nil {
 					observability.IncrementBadgerOperation("checkNotDeliveredMessages", "error")
+					observability.EndSpan(span, err)
 					return err
 				}
 
 				if msg.Attempts() <= 3 {
 					msg.IncAttempts()
 					messages = append(messages, msg)
+
+					// Registrar temas de mensajes no entregados
+					topicsChecked[msg.Topic().Name] = true
 				}
 
 				return nil
@@ -126,10 +177,23 @@ func (b BadgerDB) checkNotDeliveredMessages() ([]Message, error) {
 		return nil
 	})
 
+	// Convertir mapa de temas a slice para el atributo del span
+	var topicsList []string
+	for topic := range topicsChecked {
+		topicsList = append(topicsList, topic)
+	}
+
+	// Añadir atributos al span
+	observability.AddSpanAttributes(span,
+		observability.IntAttribute("messages.count", len(messages)),
+		observability.StringAttribute("topics.checked", strings.Join(topicsList, ",")),
+	)
+
 	if err == nil {
 		observability.IncrementBadgerOperation("checkNotDeliveredMessages", "success")
 	} else {
 		observability.IncrementBadgerOperation("checkNotDeliveredMessages", "error")
+		observability.EndSpan(span, err)
 	}
 
 	return messages, err

@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/dgraph-io/badger/v4"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/tomiok/queuety/server/observability"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Server struct {
@@ -153,7 +155,18 @@ func (s *Server) printStats() {
 }
 
 func (s *Server) handleConnections(conn net.Conn) {
-	// Incrementar contador de conexiones
+	_, span := observability.StartSpan(
+		context.Background(),
+		"handle_connections",
+		observability.WithSpanKind(trace.SpanKindServer),
+	)
+	defer observability.EndSpan(span, nil)
+
+	observability.AddSpanAttributes(span,
+		observability.StringAttribute("client.remote_addr", conn.RemoteAddr().String()),
+		observability.StringAttribute("client.local_addr", conn.LocalAddr().String()),
+	)
+
 	s.mu.Lock()
 	s.activeConnections++
 	observability.UpdateActiveConnectionsCount(s.activeConnections)
@@ -174,10 +187,12 @@ func (s *Server) handleConnections(conn net.Conn) {
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				s.disconnect(conn)
+				observability.EndSpan(span, err)
 				break
 			}
 
 			log.Printf("cannot read message %v \n", err)
+			observability.EndSpan(span, err)
 			continue
 		}
 
@@ -189,12 +204,24 @@ func (s *Server) handleConnections(conn net.Conn) {
 }
 
 func (s *Server) handleJSON(conn net.Conn, buff []byte) {
+	_, span := observability.StartSpan(
+		context.Background(),
+		"handle_json_message",
+		observability.WithSpanKind(trace.SpanKindServer),
+	)
+	defer observability.EndSpan(span, nil)
+
 	startTime := time.Now()
 	msg, err := DecodeMessage(buff)
 	if err != nil {
 		log.Printf("cannot parse message %v \n", err)
+		observability.EndSpan(span, err)
 		return
 	}
+
+	observability.AddSpanAttributes(span,
+		observability.StringAttribute("topic.name", msg.Topic().Name),
+	)
 
 	var operation string
 	switch msg.Type() {
@@ -217,26 +244,42 @@ func (s *Server) handleJSON(conn net.Conn, buff []byte) {
 		operation = "unknown"
 	}
 
+	observability.AddSpanAttributes(span,
+		observability.StringAttribute("operation", operation),
+	)
+
 	// Observar tiempo de procesamiento
 	processingTime := time.Since(startTime).Seconds()
 	observability.ObserveMessageProcessingTime(msg.Topic().Name, operation, processingTime)
 }
 
 func (s *Server) sendNewMessage(message Message) {
+	_, span := observability.StartSpan(
+		context.Background(),
+		"send_message",
+		observability.WithSpanKind(trace.SpanKindProducer),
+	)
+	defer observability.EndSpan(span, nil)
+
+	observability.AddSpanAttributes(span,
+		observability.StringAttribute("topic.name", message.Topic().Name),
+		observability.StringAttribute("message.id", message.ID()),
+	)
+
 	clients := s.clients[message.Topic()]
 	if len(clients) == 0 {
 		log.Printf("topic not found, actual name: %s, values in memory: %v", message.Topic().Name, s.clients)
+		observability.EndSpan(span, fmt.Errorf("topic not found: %s", message.Topic().Name))
 		return
 	}
 
-	// Incrementar métrica de mensajes publicados
 	observability.IncrementPublishedMessages(message.Topic().Name)
 
 	// write for all the clients/connections
 	for _, conn := range clients {
 		b, err := message.Marshall()
 		if err != nil {
-			log.Printf("cannot marshall message: %v\n", err) // unclear error, don't want to re-intent.
+			observability.EndSpan(span, fmt.Errorf("marshall error: %v", err))
 			return
 		}
 
@@ -244,14 +287,13 @@ func (s *Server) sendNewMessage(message Message) {
 		if err != nil {
 			log.Printf("cannot write in connection: %v message\n", err)
 
-			// Incrementar métrica de mensajes fallidos
 			observability.IncrementFailedMessages(message.Topic().Name)
 
+			observability.EndSpan(span, fmt.Errorf("write error: %v", err))
 			saveUnsentMessage(message, s.save)
 			return
 		}
 
-		// Incrementar métrica de mensajes entregados
 		observability.IncrementDeliveredMessages(message.Topic().Name)
 
 		fmt.Println("saving message")
@@ -263,6 +305,18 @@ func (s *Server) sendNewMessage(message Message) {
 }
 
 func (s *Server) doLogin(conn net.Conn, message Message) {
+	_, span := observability.StartSpan(
+		context.Background(),
+		"do_login",
+		observability.WithSpanKind(trace.SpanKindServer),
+	)
+	defer observability.EndSpan(span, nil)
+
+	observability.AddSpanAttributes(span,
+		observability.StringAttribute("user.attempt", message.User()),
+		observability.StringAttribute("client.remote_addr", conn.RemoteAddr().String()),
+	)
+
 	fmt.Println(s)
 	if !s.needAuth() {
 		message.updateAuthSuccess() // no auth need means successful.
@@ -270,6 +324,7 @@ func (s *Server) doLogin(conn net.Conn, message Message) {
 		if err != nil {
 			// just close the connection.
 			_ = conn.Close()
+			observability.EndSpan(span, err)
 		}
 		_, _ = conn.Write(b)
 		return
@@ -281,11 +336,12 @@ func (s *Server) doLogin(conn net.Conn, message Message) {
 		if err != nil {
 			// just close the connection.
 			_ = conn.Close()
+			observability.EndSpan(span, err)
 		}
 		_, _ = conn.Write(b)
 
-		// Incrementar métrica de intento de autenticación fallido
 		observability.IncrementAuthAttempt("failed")
+		observability.EndSpan(span, fmt.Errorf("authentication failed"))
 		return
 	}
 
@@ -294,12 +350,11 @@ func (s *Server) doLogin(conn net.Conn, message Message) {
 	if err != nil {
 		// just close the connection.
 		_ = conn.Close()
+		observability.EndSpan(span, err)
 	}
 	_, _ = conn.Write(b)
 
-	// Incrementar métrica de intento de autenticación exitoso
 	observability.IncrementAuthAttempt("success")
-	return
 }
 
 func (s *Server) validateAuth(msg Message) bool {
@@ -326,33 +381,84 @@ func (s *Server) save(message Message) {
 }
 
 func (s *Server) addNewSubscriber(conn net.Conn, topic Topic) {
+	_, span := observability.StartSpan(
+		context.Background(),
+		"add_subscriber",
+		observability.WithSpanKind(trace.SpanKindInternal),
+	)
+	defer observability.EndSpan(span, nil)
+
+	observability.AddSpanAttributes(span,
+		observability.StringAttribute("topic.name", topic.Name),
+	)
+
 	s.clients[topic] = append(s.clients[topic], conn)
 
-	// Actualizar métrica de suscriptores por tema
 	observability.UpdateSubscribersCount(topic.Name, len(s.clients[topic]))
 }
 
 func (s *Server) addNewTopic(name string) {
+	_, span := observability.StartSpan(
+		context.Background(),
+		"add_topic",
+		observability.WithSpanKind(trace.SpanKindInternal),
+	)
+	defer observability.EndSpan(span, nil)
+
+	observability.AddSpanAttributes(span,
+		observability.StringAttribute("topic.name", name),
+	)
+
 	s.clients[NewTopic(name)] = []net.Conn{}
 
-	// Actualizar métrica de temas activos
 	observability.UpdateActiveTopicsCount(len(s.clients))
 }
 
 func (s *Server) ack(message Message) {
+	_, span := observability.StartSpan(
+		context.Background(),
+		"message_ack",
+		observability.WithSpanKind(trace.SpanKindInternal),
+	)
+	defer observability.EndSpan(span, nil)
+
+	observability.AddSpanAttributes(span,
+		observability.StringAttribute("message.id", message.ID()),
+		observability.StringAttribute("topic.name", message.Topic().Name),
+	)
+
 	if err := s.DB.updateMessageACK(message); err != nil {
 		log.Printf("cannot ACK message with id %s, %v", message.ID(), err)
+
+		observability.EndSpan(span, err)
 	}
 }
 
 func (s *Server) disconnect(conn net.Conn) {
+	_, span := observability.StartSpan(
+		context.Background(),
+		"disconnect",
+		observability.WithSpanKind(trace.SpanKindServer),
+	)
+	defer observability.EndSpan(span, nil)
+
+	observability.AddSpanAttributes(span,
+		observability.StringAttribute("client.remote_addr", conn.RemoteAddr().String()),
+		observability.StringAttribute("client.local_addr", conn.LocalAddr().String()),
+	)
+
+	var disconnectedTopics []string
 	for topic, clients := range s.clients {
 		for i, client := range clients {
 			if client == conn {
 				s.clients[topic] = append(clients[:i], clients[i+1:]...)
 				log.Printf("client removed in topic: %s", topic.Name)
 
-				// Actualizar métrica de suscriptores por tema
+				disconnectedTopics = append(disconnectedTopics, topic.Name)
+				observability.AddSpanAttributes(span,
+					observability.StringAttribute("topic.name", topic.Name),
+				)
+
 				observability.UpdateSubscribersCount(topic.Name, len(s.clients[topic]))
 				break
 			}
@@ -364,12 +470,18 @@ func (s *Server) disconnect(conn net.Conn) {
 		}
 	}
 
+	if len(disconnectedTopics) > 0 {
+		observability.AddSpanAttributes(span,
+			observability.StringAttribute("disconnected_topics", strings.Join(disconnectedTopics, ",")),
+		)
+	}
+
 	err := conn.Close()
 	if err != nil {
 		log.Printf("cannot close deleted connection %v", err)
+		observability.EndSpan(span, err)
 	}
 
-	// Actualizar métrica de temas activos
 	observability.UpdateActiveTopicsCount(len(s.clients))
 }
 
@@ -381,10 +493,8 @@ func saveUnsentMessage(msg Message, saveFn func(m Message)) {
 func (s *Server) StartWebServer() error {
 	mux := http.NewServeMux()
 
-	// Verificar variable de entorno para métricas de Prometheus
-	metricsEnabled := os.Getenv("QUEUETY_METRICS_ENABLED")
+	metricsEnabled := os.Getenv("QUEUETY_PROM_METRICS_ENABLED")
 	if metricsEnabled == "" || metricsEnabled == "true" {
-		// Configurar el endpoint de métricas de Prometheus solo si está habilitado
 		mux.Handle("/metrics", promhttp.Handler())
 	}
 
