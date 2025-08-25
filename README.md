@@ -93,82 +93,82 @@ make clean
 The client is only in GitHub now, you can use go get in order to use the manager.
 go install github.com/tomiok/queuety/manager@v0.0.4
 
-## Observabilidad
+## Observability
 
-Queuety proporciona capacidades avanzadas de observabilidad utilizando OpenTelemetry y Prometheus.
+Queuety provides advanced observability capabilities using OpenTelemetry and Prometheus.
 
-### Métricas
+### Metrics
 
-#### Métricas de Mensajes
-- `queuety_messages_published_total`: Total de mensajes publicados por tema
-- `queuety_messages_delivered_total`: Total de mensajes entregados por tema
-- `queuety_messages_failed_total`: Total de mensajes fallidos por tema
+#### Message Metrics
+- `queuety_messages_published_total`: Total messages published by topic
+- `queuety_messages_delivered_total`: Total messages delivered by topic
+- `queuety_messages_failed_total`: Total failed messages by topic
 
-#### Métricas de Rendimiento
-- `queuety_message_processing_seconds`: Histograma de latencia de procesamiento de mensajes
-- `queuety_message_processing_average_seconds`: Tiempo promedio de procesamiento de mensajes
+#### Performance Metrics
+- `queuety_message_processing_seconds`: Message processing latency histogram
+- `queuety_message_processing_average_seconds`: Average message processing time
 
-#### Métricas de Sistema
-- `queuety_topics_total`: Número total de temas activos
-- `queuety_subscribers_total`: Número de suscriptores por tema
-- `queuety_active_connections`: Número de conexiones TCP activas
+#### System Metrics
+- `queuety_topics_total`: Total number of active topics
+- `queuety_subscribers_total`: Number of subscribers per topic
+- `queuety_active_connections`: Number of active TCP connections
 
-#### Métricas de Base de Datos
-- `queuety_badger_operations_total`: Métricas de operaciones de BadgerDB
+#### Database Metrics
+- `queuety_badger_operations_total`: BadgerDB operation metrics
 
-#### Métricas de Autenticación
-- `queuety_auth_attempts_total`: Intentos de autenticación (éxito/fallo)
+#### Authentication Metrics
+- `queuety_auth_attempts_total`: Authentication attempts (success/failure)
 
-### Trazas (Spans)
+### Traces (Spans)
 
-Queuety instrumenta múltiples operaciones con spans de OpenTelemetry:
+Queuety instruments multiple operations with OpenTelemetry spans:
 
-#### Spans de Conexión
-- `handle_connections`: Manejo de conexiones de cliente
-  - Atributos: `client.remote_addr`, `client.local_addr`
+#### Connection Spans
+- `handle_connections`: Client connection handling
+  - Attributes: `client.remote_addr`, `client.local_addr`
 
-#### Spans de Mensajes
-- `send_message`: Envío de nuevos mensajes
-  - Atributos: `topic.name`, `message.id`
-- `handle_json_message`: Procesamiento de mensajes JSON
-  - Atributos: `topic.name`, `operation`
+#### Message Spans
+- `send_message`: Sending new messages
+  - Attributes: `topic.name`, `message.id`
+- `handle_json_message`: JSON message processing
+  - Attributes: `topic.name`, `operation`
 
-#### Spans de Base de Datos
-- `badger_save_message`: Guardar mensaje en BadgerDB
-  - Atributos: `message.id`, `topic.name`
-- `badger_update_message_ack`: Actualizar ACK de mensaje
-  - Atributos: `message.id`, `topic.name`
-- `badger_check_not_delivered_messages`: Verificar mensajes no entregados
-  - Atributos: `messages.count`, `topics.checked`
+#### Database Spans
+- `badger_save_message`: Save message in BadgerDB
+  - Attributes: `message.id`, `topic.name`
+- `badger_update_message_ack`: Update message ACK
+  - Attributes: `message.id`, `topic.name`
+- `badger_check_not_delivered_messages`: Check undelivered messages
+  - Attributes: `messages.count`, `topics.checked`
 
-#### Spans de Autenticación
-- `do_login`: Proceso de inicio de sesión
-  - Atributos: `user.attempt`, `client.remote_addr`
+#### Authentication Spans
+- `do_login`: Login process
+  - Attributes: `user.attempt`, `client.remote_addr`
 
-#### Spans de Gestión de Temas
-- `add_subscriber`: Añadir nuevo suscriptor
-  - Atributos: `topic.name`
-- `add_topic`: Crear nuevo tema
-  - Atributos: `topic.name`
+#### Topic Management Spans
+- `add_subscriber`: Add new subscriber
+  - Attributes: `topic.name`
+- `add_topic`: Create new topic
+  - Attributes: `topic.name`
 
-### Configuración
+### Configuration
 
-Para habilitar OpenTelemetry, configura las siguientes variables de entorno:
+To enable OpenTelemetry, configure the following environment variables:
 
-- `QUEUETY_OTEL_ENABLED`: Habilitar OpenTelemetry (`true`/`false`)
-- `OTEL_EXPORTER_OTLP_GRPC_ENDPOINT`: Endpoint gRPC de OpenTelemetry
-- `OTEL_EXPORTER_OTLP_HTTP_ENDPOINT`: Endpoint HTTP de OpenTelemetry (alternativo)
+- `QUEUETY_OTEL_ENABLED`: Enable OpenTelemetry (`true`/`false`)
+- `OTEL_EXPORTER_OTLP_GRPC_ENDPOINT`: OpenTelemetry gRPC endpoint
+- `OTEL_EXPORTER_OTLP_HTTP_ENDPOINT`: OpenTelemetry HTTP endpoint (alternative)
 
-Para habilitar Prometheus, configura las siguientes variables de entorno:
+To enable Prometheus, configure the following environment variables:
 
-- `QUEUETY_PROM_METRICS_ENABLED`: Exponer metricas de Prometheus (`true`/`false`)
+- `QUEUETY_PROM_METRICS_ENABLED`: Expose Prometheus metrics (`true`/`false`)
 
-### Exportadores Soportados
+### Supported Exporters
 
 - Prometheus (endpoint `/metrics`)
-- OpenTelemetry (gRPC y HTTP)
+- OpenTelemetry (gRPC and HTTP)
 
-*Nota: La instrumentación de métricas y trazas está en desarrollo continuo.*
+*Note: Metrics and tracing instrumentation is under continuous development.*
 
 ## Roadmap
 
