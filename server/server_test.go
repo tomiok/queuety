@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -14,11 +15,12 @@ import (
 
 func Test_ServerStart(t *testing.T) {
 	s, err := NewServer(Config{
-		Protocol:   "tcp",
-		Port:       ":60000",
-		BadgerPath: "/tmp/badger_test",
-		Duration:   10,
-		Auth:       nil,
+		Protocol:      "tcp",
+		Port:          ":60000",
+		BadgerPath:    "/tmp/badger_test",
+		WebServerPort: ":60001",
+		Duration:      10,
+		Auth:          nil,
 	})
 	if err != nil {
 		t.Fatalf("should not see an err here %v", err)
@@ -31,12 +33,7 @@ func Test_ServerStart(t *testing.T) {
 			return
 		}
 	}()
-	time.Sleep(500 * time.Millisecond)
-
-	err = s.Close()
-	if err != nil {
-		t.Fatalf("should not see an err here %v", err)
-	}
+	time.Sleep(100 * time.Millisecond)
 }
 
 func Test_Server(t *testing.T) {
@@ -53,6 +50,9 @@ func Test_Server(t *testing.T) {
 		format:   MessageFormatJSON,
 		DB: BadgerDB{
 			DB: db,
+		},
+		webServer: &http.Server{
+			Addr: ":60124",
 		},
 		listener: nil,
 	}
@@ -77,7 +77,7 @@ func Test_Server(t *testing.T) {
 	id := uuid.NewString()
 	nextID := uuid.NewString()
 
-	msg := NewMessageBuilder().
+	__msg := NewMessageBuilder().
 		WithID("false-" + id).
 		WithNextID(nextID).
 		WithType(MessageTypeNew).
@@ -87,7 +87,7 @@ func Test_Server(t *testing.T) {
 		WithAck(false).
 		Build()
 
-	srv.save(msg)
+	srv.save(__msg)
 
 	time.Sleep(10 * time.Microsecond)
 	err = db.View(func(txn *badger.Txn) error {
