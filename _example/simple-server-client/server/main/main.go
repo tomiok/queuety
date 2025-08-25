@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/tomiok/queuety/server"
 	"log"
+	"time"
 )
 
 func main() {
@@ -11,7 +12,7 @@ func main() {
 		Port:          ":9845",
 		BadgerPath:    "/tmp/data",
 		WebServerPort: ":9846",
-		Duration:      10,
+		Duration:      3600 * time.Second,
 		Auth:          nil,
 	})
 

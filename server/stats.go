@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"net"
 	"net/http"
 	"sync/atomic"
@@ -79,12 +78,10 @@ func (s *Server) handleStats(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) incSentMessages(topic Topic) {
 	val, ok := s.sentMessages[topic]
 	if ok {
-		log.Println("adding existing value")
 		val.Add(1)
 		return
 	}
 
-	log.Println("adding new value")
 	var newVal = &atomic.Int32{}
 	newVal.Add(1)
 	s.sentMessages[topic] = newVal

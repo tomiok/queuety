@@ -61,38 +61,11 @@ test: ## Run tests
 	@$(PRINT) "$(BLUE)Running tests...$(NC)\n"
 	$(GOTEST) -v -race ./...
 
-test-short: ## Run short tests
-	@$(PRINT) "$(BLUE)Running short tests...$(NC)\n"
-	$(GOTEST) -short -v ./...
-
 coverage: ## Generate test coverage
 	@$(PRINT) "$(BLUE)Generating test coverage...$(NC)\n"
 	$(GOTEST) -race -coverprofile=coverage.out -covermode=atomic ./...
 	$(GOCMD) tool cover -html=coverage.out -o coverage.html
 	@$(PRINT) "$(GREEN)Coverage report generated: coverage.html$(NC)\n"
-
-benchmark: ## Run benchmarks
-	@$(PRINT) "$(BLUE)Running benchmarks...$(NC)\n"
-	$(GOTEST) -bench=. -benchmem ./...
-
-## Dependencies
-deps: ## Download dependencies
-	@$(PRINT) "$(BLUE)Downloading dependencies...$(NC)\n"
-	$(GOMOD) download
-	$(GOMOD) tidy
-
-deps-update: ## Update dependencies
-	@$(PRINT) "$(BLUE)Updating dependencies...$(NC)\n"
-	$(GOGET) -u ./...
-	$(GOMOD) tidy
-
-deps-verify: ## Verify dependencies
-	@$(PRINT) "$(BLUE)Verifying dependencies...$(NC)\n"
-	$(GOMOD) verify
-
-deps-clean: ## Clean module cache
-	@$(PRINT) "$(BLUE)Cleaning module cache...$(NC)\n"
-	$(GOCMD) clean -modcache
 
 ## Installation of tools
 install-tools: install-linters install-formatters ## Install all development tools
@@ -116,14 +89,6 @@ lint: ## Run golangci-lint
 	@$(PRINT) "$(BLUE)Running golangci-lint...$(NC)\n"
 	golangci-lint run --config .golangci.yml
 
-lint-fix: ## Run golangci-lint with auto-fix
-	@$(PRINT) "$(BLUE)Running golangci-lint with auto-fix...$(NC)\n"
-	golangci-lint run --config .golangci.yml --fix
-
-lint-verbose: ## Run golangci-lint in verbose mode
-	@$(PRINT) "$(BLUE)Running golangci-lint (verbose)...$(NC)\n"
-	golangci-lint run --config .golangci.yml -v
-
 format: ## Format code
 	@$(PRINT) "$(BLUE)Formatting code with gofumpt + goimports...$(NC)\n"
 	@gofumpt -w .
@@ -139,29 +104,6 @@ format-check: ## Check if code is formatted
 		$(PRINT) "$(GREEN)All files are properly formatted$(NC)\n"; \
 	fi
 
-## CI/CD targets
-ci-setup: install-tools ## Setup CI environment
-	@$(PRINT) "$(BLUE)Setting up CI environment...$(NC)\n"
-
-ci-lint: ## Run linting in CI
-	@$(PRINT) "$(BLUE)Running CI linting...$(NC)\n"
-	golangci-lint run --config .golangci.yml --timeout 10m --issues-exit-code 1
-
-ci-test: ## Run tests in CI
-	@$(PRINT) "$(BLUE)Running CI tests...$(NC)\n"
-	$(GOTEST) -race -coverprofile=coverage.out -covermode=atomic ./...
-
-ci-build: ## Build in CI
-	@$(PRINT) "$(BLUE)Running CI build...$(NC)\n"
-	$(GOBUILD) -v ./...
-
-ci: ci-lint ci-test ci-build ## Run all CI checks
-
-## Security
-security: ## Run security checks
-	@$(PRINT) "$(BLUE)Running security checks...$(NC)\n"
-	golangci-lint run --config .golangci.yml --disable-all -E gosec
-
 ## Documentation
 docs: ## Generate documentation
 	@$(PRINT) "$(BLUE)Generating documentation...$(NC)\n"
@@ -170,9 +112,6 @@ docs: ## Generate documentation
 docs-serve: ## Serve documentation locally
 	@$(PRINT) "$(BLUE)Serving documentation on http://localhost:6060$(NC)\n"
 	godoc -http=:6060
-
-## Quality checks
-quality: format-check lint test coverage ## Run all quality checks
 
 ## Docker support
 run: build ## Build and run Docker container
@@ -195,27 +134,6 @@ shell: ## Open shell in running container
 
 docker-build: build ## Alias for build (Docker image)
 docker-run: run ## Alias for run (Docker container)
-
-## Development workflow
-dev: ## Development workflow: format, lint, test
-	@$(PRINT) "$(BLUE)Running development workflow...$(NC)\n"
-	$(MAKE) format
-	$(MAKE) lint
-	$(MAKE) test
-
-quick: ## Quick check: format-check and lint
-	@$(PRINT) "$(BLUE)Running quick checks...$(NC)\n"
-	$(MAKE) format-check
-	$(MAKE) lint
-
-## Information
-version: ## Show Go version
-	@$(PRINT) "$(BLUE)Go version:$(NC)\n"
-	$(GOCMD) version
-
-env: ## Show Go environment
-	@$(PRINT) "$(BLUE)Go environment:$(NC)\n"
-	$(GOCMD) env
 
 tools-version: ## Show tools versions
 	@$(PRINT) "$(BLUE)Tools versions:$(NC)\n"

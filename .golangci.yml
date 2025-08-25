@@ -1,291 +1,258 @@
-# golangci-lint configuration
-# Documentation: https://golangci-lint.run/usage/configuration/
 version: "2"
-run:
-  timeout: 5m
-  issues-exit-code: 1
-  tests: true
-  skip-dirs:
-    - vendor
-    - .git
-    - bin
-    - tmp
-  skip-files:
-    - ".*\\.pb\\.go$"
-    - ".*_gen\\.go$"
-    - ".*mock.*\\.go$"
-  go: "1.24"  # Updated to match queuety's go.mod
+name: CI
 
-linters:
-  disable-all: true
-  enable:
-    # Core linters (enabled by default)
-    - errcheck
-    - gosimple  # Part of staticcheck
-    - govet
-    - ineffassign
-    - staticcheck
-    - typecheck  # Critical for type safety
-    - unused
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
 
-    # Code quality
-    - bodyclose
-    - contextcheck
-    - dupl
-    - durationcheck
-    - errorlint
-    - exhaustive
-    - gochecknoinits
-    - gocognit
-    - goconst
-    - gocritic
-    - gocyclo
-    - godot
-    - goimports  # Import formatting
-    - goprintffuncname
-    - gosec
-    - lll
-    - misspell
-    - nakedret
-    - nilerr
-    - nilnil
-    - noctx
-    - nolintlint
-    - prealloc
-    - predeclared
-    - revive
-    - unconvert
-    - unparam
-    - wastedassign
-    - whitespace
+env:
+  GO_VERSION: "1.24"
+  GOLANGCI_LINT_VERSION: "v1.55.2"  # Fixed version
 
-    # Modern Go linters
-    - gofumpt  # Stricter formatting than gofmt
-    - gci      # Import grouping
-    - godox    # TODOs and FIXMEs
-    - grouper  # Analyze expression groups
-    - mnd      # Magic number detection
+jobs:
+  # Linting and formatting checks
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    # Performance and style
-    - makezero
-    - testpackage
-    - thelper
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
 
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-    exclude-functions:
-      - (*os.File).Close
-      - (*database/sql.Rows).Close
+      - name: Check Go formatting
+        run: |
+          if [ "$(gofumpt -d . | wc -l)" -gt 0 ]; then
+            echo "❌ Code is not formatted properly"
+            echo "Please run: gofumpt -w ."
+            echo "Files that need formatting:"
+            gofumpt -d .
+            exit 1
+          else
+            echo "✅ All files are properly formatted"
+          fi
 
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment  # Can be too strict for readability
-    settings:
-      shadow:
-        strict: false
+      - name: Check imports
+        run: |
+          go install golang.org/x/tools/cmd/goimports@latest
+          if [ "$(goimports -d . | wc -l)" -gt 0 ]; then
+            echo "❌ Imports are not formatted properly"
+            echo "Please run: goimports -w ."
+            echo "Files that need import formatting:"
+            goimports -d .
+            exit 1
+          else
+            echo "✅ All imports are properly formatted"
+          fi
 
-  gocyclo:
-    min-complexity: 12  # Slightly lower for better maintainability
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          args: --config .golangci.yml --timeout 10m
 
-  goconst:
-    min-len: 3          # Minimum string length
-    min-occurrences: 2  # At least 2 occurrences
-    match-constant: true
-    numbers: true       # Check for duplicate numbers too
+  # Tests
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ["1.24"]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  gofumpt:
-    lang-version: "1.24"
-    extra-rules: true
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
 
-  goimports:
-    local-prefixes: github.com/tomiok/queuety
+      - name: Download dependencies
+        run: go mod download
 
-  gci:
-    sections:
-      - standard                           # Standard library
-      - default                            # External packages
-      - prefix(github.com/tomiok/queuety)  # Local packages
-      - blank                              # Blank imports
-      - dot                                # Dot imports
+      - name: Verify dependencies
+        run: go mod verify
 
-  misspell:
-    locale: US
-    ignore-words:
-      - queuety  # Project name
+      - name: Install test dependencies
+        run: |
+          go install gotest.tools/gotestsum@latest
 
-  lll:
-    line-length: 120
-    tab-width: 4
+      - name: Run tests
+        run: |
+          gotestsum --format testname -- -race -coverprofile=coverage.out -covermode=atomic ./...
 
-  nakedret:
-    max-func-lines: 20  # Stricter naked returns
+      - name: Upload coverage to Codecov
+        if: matrix.go-version == env.GO_VERSION
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.out
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
 
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-    disabled-checks:
-      - ifElseChain    # Can make code less readable
-      - singleCaseSwitch
-      - commentedOutCode
+  # Build
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  gosec:
-    severity: medium
-    confidence: medium
-    excludes:
-      - G204  # Subprocess with variable (common in CLI tools)
-      - G304  # File path from variable (common in config)
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
 
-  revive:
-    min-confidence: 0.8
-    rules:
-      - name: atomic
-      - name: line-length-limit
-        arguments: [120]
-      - name: time-naming
-      - name: var-declaration
-      - name: unexported-return
-      - name: errorf
-      - name: blank-imports
-      - name: context-as-argument
-      - name: dot-imports
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      - name: exported
-      - name: if-return
-      - name: increment-decrement
-      - name: var-naming
-      - name: package-comments
-      - name: range
-      - name: receiver-naming
-      - name: indent-error-flow
-      - name: superfluous-else
-      - name: unreachable-code
-      - name: unused-parameter
+      - name: Download dependencies
+        run: go mod download
 
-  mnd:
-    checks:
-      - argument
-      - case
-      - condition
-      - operation
-      - return
-      - assign
-    ignored-numbers:
-      - '0'
-      - '1'
-      - '2'
-      - '3'
-      - '10'
-      - '60'    # Common for timeouts
-      - '1024'  # Buffer sizes
-      - '2048'  # Buffer sizes (like in queuety)
-    ignored-functions:
-      - strings.SplitN
-      - make
-      - time.Duration
+      - name: Build binary
+        run: |
+          go build -v -ldflags="-s -w" -o queuety ./main.go
 
-  godox:
-    keywords:
-      - NOTE
-      - OPTIMIZE
-      - HACK
-      - TODO
-      - FIXME
-      - BUG
+      - name: Test binary execution
+        run: |
+          chmod +x queuety
+          ./queuety --help || true
+          echo "✅ Binary built successfully"
 
-  testpackage:
-    skip-regexp: (export|internal)_test\.go
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: queuety-binary
+          path: queuety
+          retention-days: 7
 
-  thelper:
-    test:
-      first: true
-      name: true
-      begin: true
+  # Docker build and test
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    if: github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  staticcheck:
-    checks: ["all"]
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-  grouper:
-    const-require-single-const: false
-    var-require-single-var: false
-    import-require-single-import: false
-    type-require-single-type: false
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: queuety
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
 
-issues:
-  max-issues-per-linter: 0
-  max-same-issues: 0
-  new: false
-  fix: false
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-  exclude-rules:
-    # Exclude some linters from running on tests files
-    - path: _test\.go
-      linters:
-        - gocyclo
-        - errcheck
-        - dupl
-        - gosec
-        - gocognit
-        - mnd
-        - lll
-        - unparam
-        - goconst
+      - name: Test Docker image
+        run: |
+          docker run --rm queuety:latest --help || true
+          echo "✅ Docker image built successfully"
 
-    # Exclude some linters from main.go (often has different patterns)
-    - path: main\.go
-      linters:
-        - gochecknoinits
+  # Security scan
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    # Exclude staticcheck SA9003 (empty branch)
-    - linters:
-        - staticcheck
-      text: "SA9003:"
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
 
-    # Exclude long lines with go:generate
-    - linters:
-        - lll
-      source: "^//go:generate "
+      - name: Run Gosec Security Scanner
+        uses: securecodewarrior/github-action-gosec@master
+        with:
+          args: './...'
 
-    # Allow TODO/FIXME comments in development
-    - linters:
-        - godox
-      source: "// TODO|FIXME"
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
 
-    # Exclude magic numbers in configuration/constants
-    - path: (config|constants)\.go
-      linters:
-        - mnd
+  # Dependency review (only on PRs)
+  dependency-review:
+    name: Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  exclude:
-    # Exclude some default excludes that might be too aggressive
-    - "Error return value of .((os\\.)?std(out|err)\\..*|.*Close|.*Flush|os\\.Remove(All)?|.*print(f|ln)?|os\\.(Un)?Setenv). is not checked"
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v4
 
-output:
-  formats:
-    - format: colored-line-number
-      path: stdout
-  print-issued-lines: true
-  print-linter-name: true
-  uniq-by-line: true
-  sort-results: true
+  # Performance benchmarks (optional)
+  benchmark:
+    name: Benchmarks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-severity:
-  default: error
-  case-sensitive: false
-  rules:
-    - linters:
-        - dupl
-        - godox
-      severity: info
-    - linters:
-        - gocritic
-        - gosec
-      severity: warning
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run benchmarks
+        run: |
+          go test -bench=. -benchmem ./... > benchmark.txt || true
+          if [ -s benchmark.txt ]; then
+            echo "📊 Benchmark Results:"
+            cat benchmark.txt
+          else
+            echo "ℹ️  No benchmarks found"
+          fi
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark.txt
+          retention-days: 30
+
+  # Final success notification
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs: [build, docker, security]
+    if: success()
+    steps:
+      - name: Success notification
+        run: |
+          echo "🎉 All CI checks passed successfully!"
+          echo "✅ Linting: PASSED"
+          echo "✅ Tests: PASSED" 
+          echo "✅ Build: PASSED"
+          echo "✅ Docker: PASSED"
+          echo "✅ Security: PASSED"
+          echo ""
+          echo "🚀 Ready for deployment!"

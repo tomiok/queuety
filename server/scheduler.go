@@ -10,16 +10,16 @@ func (s *Server) run(query func() ([]Message, error)) {
 		case <-s.window.C:
 			messages, err := query()
 			if err != nil {
-				log.Printf("cannot fetch messages %v", err)
+				log.Printf("cannot fetch messages %v\n", err)
 			}
 
 			if len(messages) == 0 {
 				continue
 			}
 
-			//for _, msg := range messages {
-			//	s.sendNewMessage(msg)
-			//}
+			for _, msg := range messages {
+				s.sendNewMessage(msg)
+			}
 		}
 	}
 }

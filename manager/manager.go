@@ -54,8 +54,8 @@ func Connect(protocol, addr string, auth *Auth) (*QConn, error) {
 			return nil, errRead
 		}
 
-		var msgResponse server.Message
-		if err = json.Unmarshal(buff[:n], &msgResponse); err != nil {
+		msgResponse, err := server.DecodeMessage(buff[:n])
+		if err != nil {
 			return nil, err
 		}
 
@@ -157,7 +157,7 @@ func ConsumeJSON[T any](q *QConn, topic server.Topic) <-chan T {
 			}
 
 			if n > 0 {
-				msg, err := getMessage(b[:n])
+				msg, err := server.DecodeMessage(b[:n])
 				if err != nil {
 					log.Printf("cannot get messege %v \n", err)
 					continue

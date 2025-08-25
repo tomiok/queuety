@@ -13,7 +13,6 @@ This project uses multiple GitHub Actions workflows for different purposes:
 - **Test** - Run tests on multiple Go versions (1.21, 1.22, 1.23)
 - **Build** - Verify the project builds correctly
 - **Docker** - Build and test Docker images
-- **Security** - Security vulnerability scanning
 - **Dependency Review** - Check for security issues in dependencies (PRs only)
 
 ## 🚀 Secure Release - `slsa-release.yml`

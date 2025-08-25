@@ -128,20 +128,20 @@ func (m *Message) updateAuthFailed() {
 	m.mType = MessageAuthFailed
 }
 
-func newMessage(pubMsg PublishMessage) Message {
+func NewMessage(pubMsg PublishMessage) Message {
 	return NewMessageBuilder().
 		WithTopic(pubMsg.Topic).
 		WithBody(pubMsg.Body).
 		Build()
 }
 
-// builder pattern
-type messageBuilder struct {
+// MessageBuilder builder pattern
+type MessageBuilder struct {
 	msg Message
 }
 
-func NewMessageBuilder() *messageBuilder {
-	return &messageBuilder{
+func NewMessageBuilder() *MessageBuilder {
+	return &MessageBuilder{
 		msg: Message{
 			timestamp: time.Now().Unix(),
 			attempts:  0,
@@ -213,57 +213,57 @@ func (m *Message) String() string {
 	return fmt.Sprintf("Message %s, %s, %s at %d", m.mType, m.topic, m.body, m.timestamp)
 }
 
-func (mb *messageBuilder) WithTopic(topic Topic) *messageBuilder {
+func (mb *MessageBuilder) WithTopic(topic Topic) *MessageBuilder {
 	mb.msg.topic = topic
 	return mb
 }
 
-func (mb *messageBuilder) WithBody(body json.RawMessage) *messageBuilder {
+func (mb *MessageBuilder) WithBody(body json.RawMessage) *MessageBuilder {
 	mb.msg.body = body
 	mb.msg.bodyString = string(body)
 	return mb
 }
 
-func (mb *messageBuilder) WithID(ID string) *messageBuilder {
+func (mb *MessageBuilder) WithID(ID string) *MessageBuilder {
 	mb.msg.id = ID
 	return mb
 }
 
-func (mb *messageBuilder) WithNextID(nextID string) *messageBuilder {
+func (mb *MessageBuilder) WithNextID(nextID string) *MessageBuilder {
 	mb.msg.nextID = nextID
 	return mb
 }
 
-func (mb *messageBuilder) WithType(mtype MType) *messageBuilder {
+func (mb *MessageBuilder) WithType(mtype MType) *MessageBuilder {
 	mb.msg.mType = mtype
 	return mb
 }
 
-func (mb *messageBuilder) WithUser(user string) *messageBuilder {
+func (mb *MessageBuilder) WithUser(user string) *MessageBuilder {
 	mb.msg.user = user
 	return mb
 }
 
-func (mb *messageBuilder) WithPassword(password string) *messageBuilder {
+func (mb *MessageBuilder) WithPassword(password string) *MessageBuilder {
 	mb.msg.password = password
 	return mb
 }
 
-func (mb *messageBuilder) WithAck(ack bool) *messageBuilder {
+func (mb *MessageBuilder) WithAck(ack bool) *MessageBuilder {
 	mb.msg.ack = ack
 	return mb
 }
 
-func (mb *messageBuilder) WithAttempts(attempts int) *messageBuilder {
+func (mb *MessageBuilder) WithAttempts(attempts int) *MessageBuilder {
 	mb.msg.attempts = attempts
 	return mb
 }
 
-func (mb *messageBuilder) WithTimestamp(ts int64) *messageBuilder {
+func (mb *MessageBuilder) WithTimestamp(ts int64) *MessageBuilder {
 	mb.msg.timestamp = ts
 	return mb
 }
 
-func (mb *messageBuilder) Build() Message {
+func (mb *MessageBuilder) Build() Message {
 	return mb.msg
 }

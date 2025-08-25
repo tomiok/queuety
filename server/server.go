@@ -63,8 +63,8 @@ func NewServer(c Config) (*Server, error) {
 		pass = c.Auth.Password
 	}
 
-	if c.WebServerPort == "" {
-		c.WebServerPort = ":9846"
+	if c.WebServerPort == "" || c.WebServerPort == c.Port {
+		panic("invalid web server port")
 	}
 
 	return &Server{
@@ -72,11 +72,10 @@ func NewServer(c Config) (*Server, error) {
 		port:     c.Port,
 		format:   MessageFormatJSON,
 		clients:  make(map[Topic][]net.Conn),
-		window:   time.NewTicker(c.Duration),
+		window:   time.NewTicker(time.Second * 3600),
 		DB:       BadgerDB{DB: db},
 		User:     user,
 		Password: pass,
-
 		webServer: &http.Server{
 			Addr: c.WebServerPort,
 		},
@@ -192,7 +191,7 @@ func (s *Server) handleJSON(conn net.Conn, buff []byte) {
 func (s *Server) sendNewMessage(message Message) {
 	clients := s.clients[message.Topic()]
 	if len(clients) == 0 {
-		log.Printf("topic not found, actual name: %s, values in memory: %v", message.Topic().Name, s.clients)
+		log.Printf("topic not found, actual name: %s, values in memory: %v \n", message.Topic().Name, s.clients)
 		return
 	}
 
@@ -211,7 +210,9 @@ func (s *Server) sendNewMessage(message Message) {
 			return
 		}
 
-		s.save(message)
+		if message.attempts <= 1 {
+			s.save(message)
+		}
 
 		// check if the message was saved
 		s.incSentMessages(message.Topic())

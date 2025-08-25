@@ -7,21 +7,20 @@ services:
     container_name: queuety
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "9845:9845"
     environment:
-      - GO_ENV=production
-      - PORT=8080
+      - PORT=9845
     # volumes:
     #   - ./config:/app/config:ro
     #   - ./logs:/app/logs
     networks:
       - queuety-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+#    healthcheck:
+#      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+#      interval: 30s
+#      timeout: 10s
+#      retries: 3
+#      start_period: 40s
 
   # Uncomment if you need Redis for queue functionality
   # redis:
@@ -66,8 +65,8 @@ networks:
   queuety-network:
     driver: bridge
 
-volumes:
-  redis-data:
-    driver: local
-  postgres-data:
-    driver: local
+#volumes:
+#  redis-data:
+#    driver: local
+#  postgres-data:
+#    driver: local

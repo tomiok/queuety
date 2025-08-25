@@ -4,6 +4,12 @@ import (
 	"github.com/tomiok/queuety/server"
 	"log"
 	"os"
+	"time"
+)
+
+const (
+	portBrokerDefault = ":9845"
+	portWebDefault    = ":9846"
 )
 
 func main() {
@@ -13,16 +19,22 @@ func main() {
 	}
 
 	s, err := server.NewServer(server.Config{
-		Protocol:   "tcp4",
-		Port:       ":9845",
-		BadgerPath: badgerPath,
-		Duration:   10,
-		Auth:       nil,
+		Protocol:      "tcp4",
+		Port:          portBrokerDefault,
+		WebServerPort: portWebDefault,
+		BadgerPath:    badgerPath,
+		Duration:      3600 * time.Second,
+		Auth:          nil,
 	})
 
 	if err != nil {
 		panic(err)
 	}
+
+	log.Printf("Broker running on port %s \n Web server running on port %s \n",
+		portBrokerDefault,
+		portWebDefault,
+	)
 
 	log.Fatal(s.Start())
 }

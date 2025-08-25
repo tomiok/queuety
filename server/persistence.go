@@ -1,8 +1,8 @@
 package server
 
 import (
-	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 
@@ -50,6 +50,7 @@ func (b BadgerDB) saveMessage(message Message) error {
 func (b BadgerDB) updateMessageACK(message Message) error {
 	return b.DB.Update(func(txn *badger.Txn) error {
 		// delete entry with old key.
+		fmt.Println("deleting message")
 		if err := txn.Delete([]byte(message.ID())); err != nil {
 			log.Printf("cannot delete message with ID %s", message.ID())
 		}
@@ -78,28 +79,29 @@ func (b BadgerDB) checkNotDeliveredMessages() ([]Message, error) {
 		for it.Seek(prefix); it.ValidForPrefix(prefix); it.Next() {
 			item := it.Item()
 			k := item.Key()
-			msg := Message{}
 			err := item.Value(func(v []byte) error {
-				err := json.Unmarshal(v, &msg)
+				msg, err := DecodeMessage(v)
 				if err != nil {
 					return err
 				}
 
+				msg.IncAttempts()
 				if msg.Attempts() <= 3 {
-					msg.IncAttempts()
 					messages = append(messages, msg)
 				}
 
 				return nil
 			})
+
 			if err != nil {
-				log.Printf("cannot get message with id %s, %v \n", k, err)
+				log.Printf("cannot get message with id %s, %v\n", k, err)
 				continue
 			}
 		}
 
 		return nil
 	})
+
 	if err != nil {
 		return nil, err
 	}
