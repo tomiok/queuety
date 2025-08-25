@@ -11,10 +11,8 @@ import (
 )
 
 func main() {
-	// Verificar si OpenTelemetry está habilitado
 	otelEnabled := os.Getenv("QUEUETY_OTEL_ENABLED")
 
-	// Inicializar OpenTelemetry solo si está explícitamente habilitado
 	if otelEnabled == "true" {
 		ctx := context.Background()
 		err := observability.InitOpenTelemetry(ctx)
@@ -22,7 +20,6 @@ func main() {
 			log.Printf("Error inicializando OpenTelemetry: %v", err)
 		}
 
-		// Configurar cierre de OpenTelemetry al finalizar
 		defer func() {
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -44,7 +41,7 @@ func main() {
 		BadgerPath:    badgerPath,
 		Duration:      10,
 		Auth:          nil,
-		WebServerPort: "9846", // Corregir sintaxis del puerto
+		WebServerPort: "9846",
 	})
 
 	if err != nil {

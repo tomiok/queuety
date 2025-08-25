@@ -38,7 +38,7 @@ type Server struct {
 	webServer    *http.Server
 	sentMessages map[Topic]*atomic.Int32
 
-	// Campos para rastrear conexiones activas
+	// Fields to track active connections
 	mu                sync.Mutex
 	activeConnections int
 }
@@ -173,7 +173,6 @@ func (s *Server) handleConnections(conn net.Conn) {
 	s.mu.Unlock()
 
 	defer func() {
-		// Decrementar contador de conexiones al finalizar
 		s.mu.Lock()
 		s.activeConnections--
 		observability.UpdateActiveConnectionsCount(s.activeConnections)
@@ -248,7 +247,6 @@ func (s *Server) handleJSON(conn net.Conn, buff []byte) {
 		observability.StringAttribute("operation", operation),
 	)
 
-	// Observar tiempo de procesamiento
 	processingTime := time.Since(startTime).Seconds()
 	observability.ObserveMessageProcessingTime(msg.Topic().Name, operation, processingTime)
 }
@@ -452,7 +450,7 @@ func (s *Server) disconnect(conn net.Conn) {
 		for i, client := range clients {
 			if client == conn {
 				s.clients[topic] = append(clients[:i], clients[i+1:]...)
-				log.Printf("client removed in topic: %s", topic.Name)
+				log.Printf("client removed in topic: %s\n", topic.Name)
 
 				disconnectedTopics = append(disconnectedTopics, topic.Name)
 				observability.AddSpanAttributes(span,
@@ -466,7 +464,7 @@ func (s *Server) disconnect(conn net.Conn) {
 
 		if len(s.clients[topic]) == 0 {
 			delete(s.clients, topic)
-			log.Printf("%s is empty, deleting", topic.Name)
+			log.Printf("%s is empty, deleting\n", topic.Name)
 		}
 	}
 
@@ -498,12 +496,10 @@ func (s *Server) StartWebServer() error {
 		mux.Handle("/metrics", promhttp.Handler())
 	}
 
-	// Agregar endpoint de stats
 	mux.HandleFunc("/stats", s.handleStats)
 
 	s.webServer.Handler = mux
 
-	// Iniciar el servidor web
 	log.Printf("Starting web server on %s", s.webServer.Addr)
 	return s.webServer.ListenAndServe()
 }

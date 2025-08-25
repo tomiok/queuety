@@ -12,7 +12,6 @@ import (
 )
 
 var (
-	// Métricas de Prometheus
 	MessagesPublishedTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "queuety_messages_published_total",
@@ -38,10 +37,10 @@ var (
 	)
 
 	messageProcessingBuckets = []float64{
-		0.25, // Bucket para P50 (50%)
-		2.5,  // Bucket para P95 (95%)
-		5,    // Bucket para P99 (99%)
-		10,   // Bucket para P99.9 (99.9%)
+		0.25,
+		2.5,
+		5,
+		10,
 	}
 
 	MessageProcessingSeconds = promauto.NewHistogramVec(
@@ -99,7 +98,6 @@ var (
 		[]string{"result"},
 	)
 
-	// Métricas de OpenTelemetry
 	otelMeterProvider *sdkmetric.MeterProvider
 	otelMeter         metric.Meter
 
@@ -115,20 +113,18 @@ var (
 	otelAuthAttemptsTotal        metric.Int64Counter
 )
 
-// InitOTelMetrics inicializa los proveedores de métricas de OpenTelemetry
 func InitOTelMetrics() error {
 	otelMeterProvider = sdkmetric.NewMeterProvider()
 
-	otelMeter = otelMeterProvider.Meter("queuety") // CREAR APP_NAME EN EL .env
+	otelMeter = otelMeterProvider.Meter(ServiceName)
 
 	var err error
 
-	// Crear contadores de OpenTelemetry
 	otelMessagesPublishedTotal, err = otelMeter.Int64Counter("queuety_messages_published_total",
 		metric.WithDescription("Total published messages by topic"),
 	)
 	if err != nil {
-		log.Printf("Error creando contador de mensajes publicados: %v", err)
+		log.Printf("error creating published messages counter: %v\n", err)
 		return err
 	}
 
@@ -136,7 +132,7 @@ func InitOTelMetrics() error {
 		metric.WithDescription("Total delivered messages by topic"),
 	)
 	if err != nil {
-		log.Printf("Error creando contador de mensajes entregados: %v", err)
+		log.Printf("error creating delivered messages counter: %v\n", err)
 		return err
 	}
 
@@ -144,7 +140,7 @@ func InitOTelMetrics() error {
 		metric.WithDescription("Failed message deliveries by topic"),
 	)
 	if err != nil {
-		log.Printf("Error creando contador de mensajes fallidos: %v", err)
+		log.Printf("error creating failed messages counter: %v\n", err)
 		return err
 	}
 
@@ -153,7 +149,7 @@ func InitOTelMetrics() error {
 		metric.WithUnit("seconds"),
 	)
 	if err != nil {
-		log.Printf("Error creando histograma de procesamiento de mensajes: %v", err)
+		log.Printf("error creating message processing histogram: %v\n", err)
 		return err
 	}
 
@@ -162,7 +158,7 @@ func InitOTelMetrics() error {
 		metric.WithUnit("seconds"),
 	)
 	if err != nil {
-		log.Printf("Error creando gauge de promedio de procesamiento de mensajes: %v", err)
+		log.Printf("error creating message processing average gauge: %v\n", err)
 		return err
 	}
 
@@ -170,7 +166,7 @@ func InitOTelMetrics() error {
 		metric.WithDescription("Number of active topics"),
 	)
 	if err != nil {
-		log.Printf("Error creando gauge de temas totales: %v", err)
+		log.Printf("error creating total topics gauge: %v\n", err)
 		return err
 	}
 
@@ -178,23 +174,23 @@ func InitOTelMetrics() error {
 		metric.WithDescription("Subscribers per topic"),
 	)
 	if err != nil {
-		log.Printf("Error creando gauge de suscriptores totales: %v", err)
+		log.Printf("error creating total subscribers gauge: %v\n", err)
 		return err
 	}
 
 	otelActiveConnections, err = otelMeter.Float64Gauge("queuety_active_connections",
-		metric.WithDescription("Current TCP connections count"),
+		metric.WithDescription("Number of active TCP connections"),
 	)
 	if err != nil {
-		log.Printf("Error creando gauge de conexiones activas: %v", err)
+		log.Printf("error creating active connections gauge: %v\n", err)
 		return err
 	}
 
 	otelBadgerOperationsTotal, err = otelMeter.Int64Counter("queuety_badger_operations_total",
-		metric.WithDescription("BadgerDB operation metrics"),
+		metric.WithDescription("Total BadgerDB operations"),
 	)
 	if err != nil {
-		log.Printf("Error creando contador de operaciones de BadgerDB: %v", err)
+		log.Printf("error creating BadgerDB operations counter: %v\n", err)
 		return err
 	}
 
@@ -202,14 +198,13 @@ func InitOTelMetrics() error {
 		metric.WithDescription("Authentication attempts tracking"),
 	)
 	if err != nil {
-		log.Printf("Error creando contador de intentos de autenticación: %v", err)
+		log.Printf("error creating authentication attempts counter: %v\n", err)
 		return err
 	}
 
 	return nil
 }
 
-// CloseMetrics cierra los proveedores de métricas
 func CloseMetrics(ctx context.Context) error {
 	if otelMeterProvider != nil {
 		return otelMeterProvider.Shutdown(ctx)
@@ -217,12 +212,9 @@ func CloseMetrics(ctx context.Context) error {
 	return nil
 }
 
-// IncrementPublishedMessages incrementa el contador de mensajes publicados para un tema específico
 func IncrementPublishedMessages(topic string) {
-	// Incrementar métrica de Prometheus
 	MessagesPublishedTotal.WithLabelValues(topic).Inc()
 
-	// Incrementar métrica de OpenTelemetry (si está inicializada)
 	if otelMessagesPublishedTotal != nil {
 		otelMessagesPublishedTotal.Add(context.Background(), 1, metric.WithAttributes(
 			attribute.String("topic", topic),
@@ -230,7 +222,6 @@ func IncrementPublishedMessages(topic string) {
 	}
 }
 
-// IncrementDeliveredMessages incrementa el contador de mensajes entregados para un tema específico
 func IncrementDeliveredMessages(topic string) {
 	MessagesDeliveredTotal.WithLabelValues(topic).Inc()
 
@@ -241,7 +232,6 @@ func IncrementDeliveredMessages(topic string) {
 	}
 }
 
-// IncrementFailedMessages incrementa el contador de mensajes fallidos para un tema específico
 func IncrementFailedMessages(topic string) {
 	MessagesFailedTotal.WithLabelValues(topic).Inc()
 
@@ -252,7 +242,6 @@ func IncrementFailedMessages(topic string) {
 	}
 }
 
-// ObserveMessageProcessingTime observa el tiempo de procesamiento de un mensaje
 func ObserveMessageProcessingTime(topic, operation string, duration float64) {
 	MessageProcessingSeconds.WithLabelValues(topic, operation).Observe(duration)
 	MessageProcessingAverage.WithLabelValues(topic, operation).Set(duration)
@@ -272,9 +261,7 @@ func ObserveMessageProcessingTime(topic, operation string, duration float64) {
 	}
 }
 
-// UpdateActiveTopicsCount actualiza el número de temas activos
 func UpdateActiveTopicsCount(count int) {
-	// Actualizar métrica de Prometheus
 	TopicsTotal.Set(float64(count))
 
 	if otelTopicsTotal != nil {
@@ -282,9 +269,7 @@ func UpdateActiveTopicsCount(count int) {
 	}
 }
 
-// UpdateSubscribersCount actualiza el número de suscriptores para un tema específico
 func UpdateSubscribersCount(topic string, count int) {
-	// Actualizar métrica de Prometheus
 	SubscribersTotal.WithLabelValues(topic).Set(float64(count))
 
 	if otelSubscribersTotal != nil {
@@ -294,9 +279,7 @@ func UpdateSubscribersCount(topic string, count int) {
 	}
 }
 
-// UpdateActiveConnectionsCount actualiza el número de conexiones TCP activas
 func UpdateActiveConnectionsCount(count int) {
-	// Actualizar métrica de Prometheus
 	ActiveConnections.Set(float64(count))
 
 	if otelActiveConnections != nil {
@@ -304,7 +287,6 @@ func UpdateActiveConnectionsCount(count int) {
 	}
 }
 
-// IncrementBadgerOperation incrementa el contador de operaciones de BadgerDB
 func IncrementBadgerOperation(operation, status string) {
 	BadgerOperationsTotal.WithLabelValues(operation, status).Inc()
 
@@ -316,7 +298,6 @@ func IncrementBadgerOperation(operation, status string) {
 	}
 }
 
-// IncrementAuthAttempt incrementa el contador de intentos de autenticación
 func IncrementAuthAttempt(result string) {
 	AuthAttemptsTotal.WithLabelValues(result).Inc()
 

@@ -30,7 +30,6 @@ func NewBadger(path string, inMemory bool) (*badger.DB, error) {
 // saveMessage will store the message at the first time, the id should start with false since is the
 // 1st time we are storing the message.
 func (b BadgerDB) saveMessage(message Message) error {
-	// Iniciar span para operación de guardar mensaje
 	_, span := observability.StartSpan(
 		context.Background(),
 		"badger_save_message",
@@ -38,7 +37,6 @@ func (b BadgerDB) saveMessage(message Message) error {
 	)
 	defer observability.EndSpan(span, nil)
 
-	// Añadir atributos al span
 	observability.AddSpanAttributes(span,
 		observability.StringAttribute("message.id", message.ID()),
 		observability.StringAttribute("topic.name", message.Topic().Name),
@@ -80,7 +78,6 @@ func (b BadgerDB) saveMessage(message Message) error {
 }
 
 func (b BadgerDB) updateMessageACK(message Message) error {
-	// Iniciar span para operación de actualizar ACK
 	_, span := observability.StartSpan(
 		context.Background(),
 		"badger_update_message_ack",
@@ -88,7 +85,6 @@ func (b BadgerDB) updateMessageACK(message Message) error {
 	)
 	defer observability.EndSpan(span, nil)
 
-	// Añadir atributos al span
 	observability.AddSpanAttributes(span,
 		observability.StringAttribute("message.id", message.ID()),
 		observability.StringAttribute("topic.name", message.Topic().Name),
@@ -131,7 +127,6 @@ func (b BadgerDB) updateMessageACK(message Message) error {
 }
 
 func (b BadgerDB) checkNotDeliveredMessages() ([]Message, error) {
-	// Iniciar span para operación de verificar mensajes no entregados
 	_, span := observability.StartSpan(
 		context.Background(),
 		"badger_check_not_delivered_messages",
@@ -161,7 +156,7 @@ func (b BadgerDB) checkNotDeliveredMessages() ([]Message, error) {
 					msg.IncAttempts()
 					messages = append(messages, msg)
 
-					// Registrar temas de mensajes no entregados
+					// Register undelivered message topics
 					topicsChecked[msg.Topic().Name] = true
 				}
 
@@ -177,13 +172,11 @@ func (b BadgerDB) checkNotDeliveredMessages() ([]Message, error) {
 		return nil
 	})
 
-	// Convertir mapa de temas a slice para el atributo del span
 	var topicsList []string
 	for topic := range topicsChecked {
 		topicsList = append(topicsList, topic)
 	}
 
-	// Añadir atributos al span
 	observability.AddSpanAttributes(span,
 		observability.IntAttribute("messages.count", len(messages)),
 		observability.StringAttribute("topics.checked", strings.Join(topicsList, ",")),

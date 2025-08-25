@@ -65,12 +65,12 @@ func (s *Server) handleStats(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) incSentMessages(topic Topic) {
 	val, ok := s.sentMessages[topic]
 	if ok {
-		log.Println("adding existing value")
+		log.Printf("adding existing value\n")
 		val.Add(1)
 		return
 	}
 
-	log.Println("adding new value")
+	log.Printf("adding new value\n")
 	var newVal = &atomic.Int32{}
 	newVal.Add(1)
 	s.sentMessages[topic] = newVal
