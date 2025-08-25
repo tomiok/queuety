@@ -67,12 +67,14 @@ func (b BadgerDB) saveMessage(message Message) error {
 		return nil
 	})
 
-	if err == nil {
-		observability.IncrementBadgerOperation("saveMessage", "success")
-	} else {
+	if err != nil {
 		observability.IncrementBadgerOperation("saveMessage", "error")
 		observability.EndSpan(span, err)
+        return err
 	}
+	
+			observability.IncrementBadgerOperation("saveMessage", "success")
+			return nil
 
 	return err
 }
