@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 
@@ -35,6 +36,12 @@ func (b BadgerDB) saveMessage(message Message) error {
 		"badger_save_message",
 		observability.WithSpanKind(trace.SpanKindInternal),
 	)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("recovered from panic in saveMessage: %v\n", r)
+			observability.EndSpan(span, fmt.Errorf("panic: %v", r))
+		}
+	}()
 	defer observability.EndSpan(span, nil)
 
 	observability.AddSpanAttributes(span,
@@ -44,7 +51,6 @@ func (b BadgerDB) saveMessage(message Message) error {
 
 	if !strings.HasPrefix(message.ID(), MsgPrefixFalse) {
 		observability.IncrementBadgerOperation("saveMessage", "error")
-		observability.EndSpan(span, errors.New("invalid key, should start with 'false'"))
 		return errors.New("invalid key, should start with 'false'")
 	}
 
@@ -53,14 +59,12 @@ func (b BadgerDB) saveMessage(message Message) error {
 		msgBytes, err := message.Marshall()
 		if err != nil {
 			observability.IncrementBadgerOperation("saveMessage", "error")
-			observability.EndSpan(span, err)
 			return err
 		}
 
 		err = txn.Set([]byte(message.ID()), msgBytes)
 		if err != nil {
 			observability.IncrementBadgerOperation("saveMessage", "error")
-			observability.EndSpan(span, err)
 			return err
 		}
 
@@ -69,14 +73,12 @@ func (b BadgerDB) saveMessage(message Message) error {
 
 	if err != nil {
 		observability.IncrementBadgerOperation("saveMessage", "error")
-		observability.EndSpan(span, err)
-        return err
+		return err
 	}
-	
-			observability.IncrementBadgerOperation("saveMessage", "success")
-			return nil
 
-	return err
+	observability.IncrementBadgerOperation("saveMessage", "success")
+	return nil
+
 }
 
 func (b BadgerDB) updateMessageACK(message Message) error {
@@ -85,6 +87,12 @@ func (b BadgerDB) updateMessageACK(message Message) error {
 		"badger_update_message_ack",
 		observability.WithSpanKind(trace.SpanKindInternal),
 	)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("recovered from panic in updateMessageACK: %v\n", r)
+			observability.EndSpan(span, fmt.Errorf("panic: %v", r))
+		}
+	}()
 	defer observability.EndSpan(span, nil)
 
 	observability.AddSpanAttributes(span,
@@ -95,37 +103,34 @@ func (b BadgerDB) updateMessageACK(message Message) error {
 	err := b.DB.Update(func(txn *badger.Txn) error {
 		// delete entry with old key.
 		if err := txn.Delete([]byte(message.ID())); err != nil {
-			log.Printf("cannot delete message with ID %s", message.ID())
+			log.Printf("cannot delete message with ID %s\n", message.ID())
 			observability.IncrementBadgerOperation("updateMessageACK", "error")
-			observability.EndSpan(span, err)
+			return err
 		}
 
 		message.updateACK()
 		msgBytes, err := message.Marshall()
 		if err != nil {
 			observability.IncrementBadgerOperation("updateMessageACK", "error")
-			observability.EndSpan(span, err)
 			return err
 		}
 
 		err = txn.Set([]byte(message.ID()), msgBytes)
 		if err != nil {
 			observability.IncrementBadgerOperation("updateMessageACK", "error")
-			observability.EndSpan(span, err)
 			return err
 		}
 
 		return nil
 	})
 
-	if err == nil {
-		observability.IncrementBadgerOperation("updateMessageACK", "success")
-	} else {
+	if err != nil {
 		observability.IncrementBadgerOperation("updateMessageACK", "error")
-		observability.EndSpan(span, err)
+		return err
 	}
+	observability.IncrementBadgerOperation("updateMessageACK", "success")
+	return nil
 
-	return err
 }
 
 func (b BadgerDB) checkNotDeliveredMessages() ([]Message, error) {
@@ -134,6 +139,12 @@ func (b BadgerDB) checkNotDeliveredMessages() ([]Message, error) {
 		"badger_check_not_delivered_messages",
 		observability.WithSpanKind(trace.SpanKindInternal),
 	)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("recovered from panic in checkNotDeliveredMessages: %v\n", r)
+			observability.EndSpan(span, fmt.Errorf("panic: %v", r))
+		}
+	}()
 	defer observability.EndSpan(span, nil)
 
 	var messages []Message
@@ -150,7 +161,6 @@ func (b BadgerDB) checkNotDeliveredMessages() ([]Message, error) {
 				err := json.Unmarshal(v, &msg)
 				if err != nil {
 					observability.IncrementBadgerOperation("checkNotDeliveredMessages", "error")
-					observability.EndSpan(span, err)
 					return err
 				}
 
@@ -188,7 +198,6 @@ func (b BadgerDB) checkNotDeliveredMessages() ([]Message, error) {
 		observability.IncrementBadgerOperation("checkNotDeliveredMessages", "success")
 	} else {
 		observability.IncrementBadgerOperation("checkNotDeliveredMessages", "error")
-		observability.EndSpan(span, err)
 	}
 
 	return messages, err

@@ -160,6 +160,12 @@ func (s *Server) handleConnections(conn net.Conn) {
 		"handle_connections",
 		observability.WithSpanKind(trace.SpanKindServer),
 	)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("recovered from panic in handleConnections: %v\n", r)
+			observability.EndSpan(span, fmt.Errorf("panic: %v", r))
+		}
+	}()
 	defer observability.EndSpan(span, nil)
 
 	observability.AddSpanAttributes(span,
@@ -186,12 +192,10 @@ func (s *Server) handleConnections(conn net.Conn) {
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				s.disconnect(conn)
-				observability.EndSpan(span, err)
 				break
 			}
 
 			log.Printf("cannot read message %v \n", err)
-			observability.EndSpan(span, err)
 			continue
 		}
 
@@ -208,13 +212,18 @@ func (s *Server) handleJSON(conn net.Conn, buff []byte) {
 		"handle_json_message",
 		observability.WithSpanKind(trace.SpanKindServer),
 	)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("recovered from panic in handleJSON: %v\n", r)
+			observability.EndSpan(span, fmt.Errorf("panic: %v", r))
+		}
+	}()
 	defer observability.EndSpan(span, nil)
 
 	startTime := time.Now()
 	msg, err := DecodeMessage(buff)
 	if err != nil {
 		log.Printf("cannot parse message %v \n", err)
-		observability.EndSpan(span, err)
 		return
 	}
 
@@ -257,7 +266,9 @@ func (s *Server) sendNewMessage(message Message) {
 		"send_message",
 		observability.WithSpanKind(trace.SpanKindProducer),
 	)
-	defer observability.EndSpan(span, nil)
+	defer func() {
+		observability.EndSpan(span, nil)
+	}()
 
 	observability.AddSpanAttributes(span,
 		observability.StringAttribute("topic.name", message.Topic().Name),
@@ -267,7 +278,6 @@ func (s *Server) sendNewMessage(message Message) {
 	clients := s.clients[message.Topic()]
 	if len(clients) == 0 {
 		log.Printf("topic not found, actual name: %s, values in memory: %v", message.Topic().Name, s.clients)
-		observability.EndSpan(span, fmt.Errorf("topic not found: %s", message.Topic().Name))
 		return
 	}
 
@@ -277,7 +287,6 @@ func (s *Server) sendNewMessage(message Message) {
 	for _, conn := range clients {
 		b, err := message.Marshall()
 		if err != nil {
-			observability.EndSpan(span, fmt.Errorf("marshall error: %v", err))
 			return
 		}
 
@@ -286,8 +295,6 @@ func (s *Server) sendNewMessage(message Message) {
 			log.Printf("cannot write in connection: %v message\n", err)
 
 			observability.IncrementFailedMessages(message.Topic().Name)
-
-			observability.EndSpan(span, fmt.Errorf("write error: %v", err))
 			saveUnsentMessage(message, s.save)
 			return
 		}
@@ -308,7 +315,9 @@ func (s *Server) doLogin(conn net.Conn, message Message) {
 		"do_login",
 		observability.WithSpanKind(trace.SpanKindServer),
 	)
-	defer observability.EndSpan(span, nil)
+	defer func() {
+		observability.EndSpan(span, nil)
+	}()
 
 	observability.AddSpanAttributes(span,
 		observability.StringAttribute("user.attempt", message.User()),
@@ -322,7 +331,7 @@ func (s *Server) doLogin(conn net.Conn, message Message) {
 		if err != nil {
 			// just close the connection.
 			_ = conn.Close()
-			observability.EndSpan(span, err)
+			return
 		}
 		_, _ = conn.Write(b)
 		return
@@ -334,23 +343,10 @@ func (s *Server) doLogin(conn net.Conn, message Message) {
 		if err != nil {
 			// just close the connection.
 			_ = conn.Close()
-			observability.EndSpan(span, err)
+			return
 		}
 		_, _ = conn.Write(b)
-
-		observability.IncrementAuthAttempt("failed")
-		observability.EndSpan(span, fmt.Errorf("authentication failed"))
-		return
 	}
-
-	message.updateAuthSuccess()
-	b, err := message.Marshall()
-	if err != nil {
-		// just close the connection.
-		_ = conn.Close()
-		observability.EndSpan(span, err)
-	}
-	_, _ = conn.Write(b)
 
 	observability.IncrementAuthAttempt("success")
 }
@@ -384,6 +380,12 @@ func (s *Server) addNewSubscriber(conn net.Conn, topic Topic) {
 		"add_subscriber",
 		observability.WithSpanKind(trace.SpanKindInternal),
 	)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("recovered from panic in addNewSubscriber: %v\n", r)
+			observability.EndSpan(span, fmt.Errorf("panic: %v", r))
+		}
+	}()
 	defer observability.EndSpan(span, nil)
 
 	observability.AddSpanAttributes(span,
@@ -401,6 +403,12 @@ func (s *Server) addNewTopic(name string) {
 		"add_topic",
 		observability.WithSpanKind(trace.SpanKindInternal),
 	)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("recovered from panic in addNewTopic: %v\n", r)
+			observability.EndSpan(span, fmt.Errorf("panic: %v", r))
+		}
+	}()
 	defer observability.EndSpan(span, nil)
 
 	observability.AddSpanAttributes(span,
@@ -418,6 +426,12 @@ func (s *Server) ack(message Message) {
 		"message_ack",
 		observability.WithSpanKind(trace.SpanKindInternal),
 	)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("recovered from panic in ack: %v\n", r)
+			observability.EndSpan(span, fmt.Errorf("panic: %v", r))
+		}
+	}()
 	defer observability.EndSpan(span, nil)
 
 	observability.AddSpanAttributes(span,
@@ -426,9 +440,7 @@ func (s *Server) ack(message Message) {
 	)
 
 	if err := s.DB.updateMessageACK(message); err != nil {
-		log.Printf("cannot ACK message with id %s, %v", message.ID(), err)
-
-		observability.EndSpan(span, err)
+		log.Printf("cannot ACK message with id %s, %v\n", message.ID(), err)
 	}
 }
 
@@ -438,6 +450,12 @@ func (s *Server) disconnect(conn net.Conn) {
 		"disconnect",
 		observability.WithSpanKind(trace.SpanKindServer),
 	)
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("recovered from panic in disconnect: %v\n", r)
+			observability.EndSpan(span, fmt.Errorf("panic: %v", r))
+		}
+	}()
 	defer observability.EndSpan(span, nil)
 
 	observability.AddSpanAttributes(span,
@@ -476,8 +494,7 @@ func (s *Server) disconnect(conn net.Conn) {
 
 	err := conn.Close()
 	if err != nil {
-		log.Printf("cannot close deleted connection %v", err)
-		observability.EndSpan(span, err)
+		log.Printf("cannot close deleted connection %v\n", err)
 	}
 
 	observability.UpdateActiveTopicsCount(len(s.clients))
