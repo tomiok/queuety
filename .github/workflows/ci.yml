@@ -1,163 +1,336 @@
-name: CI
+# golangci-lint configuration
+# See https://golangci-lint.run/
 
-on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
+# Options for analysis running.
+run:
+  timeout: 5m
+  issues-exit-code: 1
+  tests: true
+  skip-dirs:
+    - vendor
+    - .git
+  skip-files:
+    - ".*\\.pb\\.go$"
+    - ".*_gen\\.go$"
 
-env:
-  GO_VERSION: "1.24"
+# See the dedicated "linters" documentation section.
+linters:
+  disable-all: true
+  enable:
+    # Enabled by default
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose
+    - contextcheck
+    - dupl
+    - durationcheck
+    - errorlint
+    - exhaustive
+    - funlen
+    - gochecknoinits
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - godox
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - importas
+    - ireturn
+    - lll
+    - makezero
+    - misspell
+    - nakedret
+    - nilerr
+    - nilnil
+    - noctx
+    - nolintlint
+    - prealloc
+    - predeclared
+    - promlinter
+    - revive
+    - tagliatelle
+    - testpackage
+    - thelper
+    - unconvert
+    - unparam
+    - varnamelen
+    - wastedassign
+    - whitespace
+    - gomnd         # Use gomnd instead of mnd for older versions
 
-jobs:
-  # Linting and formatting checks
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+# Configuration for specific linters
+linters-settings:
+  govet:
+    check-shadowing: true
+    enable-all: true
+    disable:
+      - fieldalignment # can be too strict for readability
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+  gocyclo:
+    min-complexity: 15
 
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: latest
-          args: --config .golangci.yml --timeout 10m
+  goconst:
+    min-len: 2
+    min-occurrences: 3
 
-  # Tests
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        go-version: ["1.24"]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+  misspell:
+    locale: US
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ matrix.go-version }}
-          cache: true
+  lll:
+    line-length: 120
 
-      - name: Download dependencies
-        run: go mod download
+  unparam:
+    check-exported: false
 
-      - name: Verify dependencies
-        run: go mod verify
+  nakedret:
+    max-func-lines: 30
 
-      - name: Install test dependencies
-        run: |
-          go install gotest.tools/gotestsum@latest
+  prealloc:
+    simple: true
+    range-loops: true
+    for-loops: false
 
-      - name: Run tests
-        run: |
-          gotestsum --format testname -- -race -coverprofile=coverage.out -covermode=atomic ./...
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - dupImport # https://github.com/go-critic/go-critic/issues/845
+      - ifElseChain
+      - octalLiteral
+      - whyNoLint
 
-      - name: Upload coverage to Codecov
-        if: matrix.go-version == env.GO_VERSION
-        uses: codecov/codecov-action@v4
-        with:
-          file: ./coverage.out
-          flags: unittests
-          name: codecov-umbrella
-          fail_ci_if_error: false
+  funlen:
+    lines: 100
+    statements: 50
 
-  # Build
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    needs: [lint, test]
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+  godox:
+    keywords:
+      - NOTE
+      - OPTIMIZE
+      - HACK
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ env.GO_VERSION }}
-          cache: true
+  errorlint:
+    errorf: true
+    asserts: true
+    comparison: true
 
-      - name: Download dependencies
-        run: go mod download
+  exhaustive:
+    check-generated: false
+    default-signifies-exhaustive: false
 
-      - name: Build binary
-        run: |
-          go build -v -ldflags="-s -w" -o queuety ./main.go
+  godot:
+    scope: declarations
+    exclude:
+      - "^fixme:"
+      - "^todo:"
+    period: true
+    capital: false
 
-      - name: Test binary execution
-        run: |
-          chmod +x queuety
-          ./queuety --help || true
-          echo "✅ Binary built successfully"
+  # Use gomnd instead of mnd for compatibility
+  gomnd:
+    settings:
+      mnd:
+        checks: argument,case,condition,operation,return,assign
+        ignored-numbers: 0,1,2,3
+        ignored-functions: strings.SplitN
 
-      - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: queuety-binary
-          path: queuety
-          retention-days: 7
+  gomodguard:
+    allowed:
+      modules: []
+      domains: []
+    blocked:
+      modules: []
+      versions: []
 
-  # Docker build and test
-  docker:
-    name: Docker Build
-    runs-on: ubuntu-latest
-    needs: [lint, test]
-    if: github.event_name == 'push'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+  gosec:
+    includes:
+      - G401
+      - G306
+      - G101
+    excludes:
+      - G204 # Subprocess launched with variable
+    exclude-generated: true
+    severity: "low"
+    confidence: "low"
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+  importas:
+    no-unaliased: true
+    alias: []
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: queuety
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
+  ireturn:
+    allow:
+      - anon
+      - error
+      - empty
+      - stdlib
 
-      - name: Build Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: false
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+  nilnil:
+    checked-types:
+      - ptr
+      - func
+      - iface
+      - map
+      - chan
 
-      - name: Test Docker image
-        run: |
-          docker run --rm queuety:latest --help || true
-          echo "✅ Docker image built successfully"
+  nolintlint:
+    allow-leading-space: true
+    allow-unused: false
+    require-explanation: false
+    require-specific: false
 
+  revive:
+    min-confidence: 0.8
+    rules:
+      - name: atomic
+      - name: line-length-limit
+        arguments: [140]
+      - name: time-naming
+      - name: var-declaration
+      - name: unexported-return
+      - name: errorf
+      - name: blank-imports
+      - name: context-as-argument
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      # - name: exported  # Commented out to disable godoc requirement
+      - name: if-return
+      - name: increment-decrement
+      - name: var-naming
+      # - name: package-comments  # Commented out to disable package comment requirement
+      - name: range
+      - name: receiver-naming
+      - name: indent-error-flow
+      - name: superfluous-else
+      - name: unreachable-code
+      - name: unused-parameter
 
-  # Final success notification
-  ci-success:
-    name: CI Success
-    runs-on: ubuntu-latest
-    needs: [build, docker]
-    if: success()
-    steps:
-      - name: Success notification
-        run: |
-          echo "🎉 All CI checks passed successfully!"
-          echo "✅ Linting: PASSED"
-          echo "✅ Tests: PASSED" 
-          echo "✅ Build: PASSED"
-          echo "✅ Docker: PASSED"
-          echo ""
-          echo "🚀 Ready for deployment!"
+  staticcheck:
+    checks: ["all"]
+
+  tagliatelle:
+    case:
+      rules:
+        json: snake
+        yaml: camel
+        xml: camel
+        bson: camel
+        avro: snake
+        mapstructure: kebab
+
+  testpackage:
+    skip-regexp: (export|internal)_test\.go
+
+  thelper:
+    test:
+      first: true
+      name: true
+      begin: true
+    benchmark:
+      first: true
+      name: true
+      begin: true
+    tb:
+      first: true
+      name: true
+      begin: true
+
+  varnamelen:
+    min-name-length: 1
+    ignore-type-assert-ok: true
+    ignore-map-index-ok: true
+    ignore-chan-recv-ok: true
+    ignore-names:
+      - err
+      - ok
+      - id
+      - i
+      - j
+      - k
+      - v
+      - t
+      - x
+      - y
+
+# See the dedicated "issues" documentation section.
+issues:
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+        - funlen
+        - goconst
+        - gocognit
+        - gomnd
+        - lll
+
+    # Exclude some staticcheck messages
+    - linters:
+        - staticcheck
+      text: "SA9003:"
+
+    # Exclude lll issues for long lines with go:generate
+    - linters:
+        - lll
+      source: "^//go:generate "
+
+    # Exclude godoc requirements for exported functions and types
+    - linters:
+        - revive
+      text: "exported .* should have comment.*or be unexported"
+
+    # Alternative: exclude missing-doc warnings from govet
+    - linters:
+        - govet
+      text: "exported .* should have comment"
+
+  # Show only new issues: if there are unstaged changes or untracked files,
+  # only those changes are analyzed, else only changes in HEAD~ are analyzed.
+  new: false
+
+  # Fix found issues (if it's supported by the linter)
+  fix: false
+
+  # Maximum issues count per one linter. Set to 0 to disable. Default is 50.
+  max-issues-per-linter: 0
+
+  # Maximum count of issues with the same text. Set to 0 to disable. Default is 3.
+  max-same-issues: 0
+
+# Output configuration options.
+output:
+  format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+  uniq-by-line: true
+  sort-results: true
+
+# See the dedicated "severity" documentation section.
+severity:
+  default-severity: error
+  case-sensitive: false
+  rules:
+    - linters:
+        - dupl
+      severity: info
+    - linters:
+        - gocritic
+      severity: warning
+    - linters:
+        - godox
+      severity: info
