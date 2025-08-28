@@ -315,7 +315,7 @@ output:
 
 # See the dedicated "severity" documentation section.
 severity:
-  default: error
+  default-severity: error
   case-sensitive: false
   rules:
     - linters:
