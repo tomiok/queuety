@@ -61,221 +61,208 @@ linters:
     - testpackage
     - thelper
     - unconvert
-    - unused
     - unparam
     - varnamelen
     - wastedassign
     - whitespace
     - mnd         # replaces gomnd (magic number detector)
 
-  # Configuration for specific linters
-  settings:
-    govet:
-      check-shadowing: true
-      enable-all: true
-      disable:
-        - fieldalignment # can be too strict for readability
+# Configuration for specific linters
+linters-settings:
+  govet:
+    check-shadowing: true
+    enable-all: true
+    disable:
+      - fieldalignment # can be too strict for readability
 
-    gocyclo:
-      min-complexity: 15
+  gocyclo:
+    min-complexity: 15
 
-    goconst:
-      min-len: 2
-      min-occurrences: 3
+  goconst:
+    min-len: 2
+    min-occurrences: 3
 
-    misspell:
-      locale: US
+  misspell:
+    locale: US
 
-    lll:
-      line-length: 120
+  lll:
+    line-length: 120
 
-    unparam:
-      check-exported: false
+  unparam:
+    check-exported: false
 
-    nakedret:
-      max-func-lines: 30
+  nakedret:
+    max-func-lines: 30
 
-    prealloc:
-      simple: true
-      range-loops: true
-      for-loops: false
+  prealloc:
+    simple: true
+    range-loops: true
+    for-loops: false
 
-    gocritic:
-      enabled-tags:
-        - diagnostic
-        - experimental
-        - opinionated
-        - performance
-        - style
-      disabled-checks:
-        - dupImport # https://github.com/go-critic/go-critic/issues/845
-        - ifElseChain
-        - octalLiteral
-        - whyNoLint
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - dupImport # https://github.com/go-critic/go-critic/issues/845
+      - ifElseChain
+      - octalLiteral
+      - whyNoLint
 
-    funlen:
-      lines: 100
-      statements: 50
+  funlen:
+    lines: 100
+    statements: 50
 
-    godox:
-      keywords:
-        - NOTE
-        - OPTIMIZE
-        - HACK
+  godox:
+    keywords:
+      - NOTE
+      - OPTIMIZE
+      - HACK
 
-    errorlint:
-      errorf: true
-      asserts: true
-      comparison: true
+  errorlint:
+    errorf: true
+    asserts: true
+    comparison: true
 
-    exhaustive:
-      check-generated: false
-      default-signifies-exhaustive: false
+  exhaustive:
+    check-generated: false
+    default-signifies-exhaustive: false
 
-    godot:
-      scope: declarations
-      exclude:
-        - "^fixme:"
-        - "^todo:"
-      period: true
-      capital: false
+  godot:
+    scope: declarations
+    exclude:
+      - "^fixme:"
+      - "^todo:"
+    period: true
+    capital: false
 
-    # Renamed from gomnd to mnd
-    mnd:
-      checks: argument,case,condition,operation,return,assign
-      ignored-numbers: 0,1,2,3
-      ignored-functions: strings.SplitN
+  # Renamed from gomnd to mnd
+  mnd:
+    checks: argument,case,condition,operation,return,assign
+    ignored-numbers: 0,1,2,3
+    ignored-functions: strings.SplitN
 
-    gomodguard:
-      allowed:
-        modules: []
-        domains: []
-      blocked:
-        modules: []
-        versions: []
+  gomodguard:
+    allowed:
+      modules: []
+      domains: []
+    blocked:
+      modules: []
+      versions: []
 
-    gosec:
-      includes:
-        - G401
-        - G306
-        - G101
-      excludes:
-        - G204 # Subprocess launched with variable
-      exclude-generated: true
-      severity: "low"
-      confidence: "low"
+  gosec:
+    includes:
+      - G401
+      - G306
+      - G101
+    excludes:
+      - G204 # Subprocess launched with variable
+    exclude-generated: true
+    severity: "low"
+    confidence: "low"
 
-    importas:
-      no-unaliased: true
-      alias: []
+  importas:
+    no-unaliased: true
+    alias: []
 
-    ireturn:
-      allow:
-        - anon
-        - error
-        - empty
-        - stdlib
+  ireturn:
+    allow:
+      - anon
+      - error
+      - empty
+      - stdlib
 
-    nilnil:
-      checked-types:
-        - ptr
-        - func
-        - iface
-        - map
-        - chan
+  nilnil:
+    checked-types:
+      - ptr
+      - func
+      - iface
+      - map
+      - chan
 
-    nolintlint:
-      allow-leading-space: true
-      allow-unused: false
-      require-explanation: false
-      require-specific: false
+  nolintlint:
+    allow-leading-space: true
+    allow-unused: false
+    require-explanation: false
+    require-specific: false
 
-    revive:
-      min-confidence: 0.8
+  revive:
+    min-confidence: 0.8
+    rules:
+      - name: atomic
+      - name: line-length-limit
+        arguments: [140]
+      - name: time-naming
+      - name: var-declaration
+      - name: unexported-return
+      - name: errorf
+      - name: blank-imports
+      - name: context-as-argument
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: if-return
+      - name: increment-decrement
+      - name: var-naming
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: indent-error-flow
+      - name: superfluous-else
+      - name: unreachable-code
+      - name: unused-parameter
+
+  staticcheck:
+    checks: ["all"]
+
+  tagliatelle:
+    case:
       rules:
-        - name: atomic
-        - name: line-length-limit
-          arguments: [140]
-        - name: time-naming
-        - name: var-declaration
-        - name: unexported-return
-        - name: errorf
-        - name: blank-imports
-        - name: context-as-argument
-        - name: dot-imports
-        - name: error-return
-        - name: error-strings
-        - name: error-naming
-        - name: exported
-        - name: if-return
-        - name: increment-decrement
-        - name: var-naming
-        - name: package-comments
-        - name: range
-        - name: receiver-naming
-        - name: indent-error-flow
-        - name: superfluous-else
-        - name: unreachable-code
-        - name: unused-parameter
+        json: snake
+        yaml: camel
+        xml: camel
+        bson: camel
+        avro: snake
+        mapstructure: kebab
 
-    staticcheck:
-      checks: ["all"]
+  testpackage:
+    skip-regexp: (export|internal)_test\.go
 
-    tagliatelle:
-      case:
-        rules:
-          json: snake
-          yaml: camel
-          xml: camel
-          bson: camel
-          avro: snake
-          mapstructure: kebab
+  thelper:
+    test:
+      first: true
+      name: true
+      begin: true
+    benchmark:
+      first: true
+      name: true
+      begin: true
+    tb:
+      first: true
+      name: true
+      begin: true
 
-    testpackage:
-      skip-regexp: (export|internal)_test\.go
-
-    thelper:
-      test:
-        first: true
-        name: true
-        begin: true
-      benchmark:
-        first: true
-        name: true
-        begin: true
-      tb:
-        first: true
-        name: true
-        begin: true
-
-    varnamelen:
-      min-name-length: 1
-      ignore-type-assert-ok: true
-      ignore-map-index-ok: true
-      ignore-chan-recv-ok: true
-      ignore-names:
-        - err
-        - ok
-        - id
-        - i
-        - j
-        - k
-        - v
-        - t
-        - x
-        - y
-
-# See the dedicated "formatters" documentation section.
-formatters:
-  gofumpt:
-    command: gofumpt
-    args: ["-w"]
-    lang-version: "1.24"
-    extra-rules: true
-
-  goimports:
-    command: goimports
-    args: ["-w", "-local", "github.com/tomiok/queuety"]
+  varnamelen:
+    min-name-length: 1
+    ignore-type-assert-ok: true
+    ignore-map-index-ok: true
+    ignore-chan-recv-ok: true
+    ignore-names:
+      - err
+      - ok
+      - id
+      - i
+      - j
+      - k
+      - v
+      - t
+      - x
+      - y
 
 # See the dedicated "issues" documentation section.
 issues:
