@@ -1,6 +1,9 @@
-# .golangci.yml
-# golangci-lint configuration for GitHub Actions
+# golangci-lint v2 configuration
+# See https://golangci-lint.run/
 
+version: "2"
+
+# Options for analysis running.
 run:
   timeout: 5m
   issues-exit-code: 1
@@ -8,225 +11,273 @@ run:
   skip-dirs:
     - vendor
     - .git
-    - bin
-    - dist
   skip-files:
     - ".*\\.pb\\.go$"
     - ".*_gen\\.go$"
-    - ".*\\.mock\\.go$"
+  go: "1.24"
 
+# See the dedicated "linters" documentation section.
 linters:
   disable-all: true
   enable:
-    # Core linters (always enable)
-    - errcheck        # Check for unchecked errors
-    - govet          # Go vet examines Go source code
-    - ineffassign    # Detect ineffectual assignments
-    - staticcheck    # Static analysis checks
-    - unused         # Check for unused constants, variables, functions and types
+    # Enabled by default
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose
+    - contextcheck
+    - dupl
+    - durationcheck
+    - errorlint
+    - exhaustive
+    - funlen
+    - gochecknoinits
+    - gocognit
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - godox
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - importas
+    - ireturn
+    - lll
+    - makezero
+    - misspell
+    - nakedret
+    - nilerr
+    - nilnil
+    - noctx
+    - nolintlint
+    - prealloc
+    - predeclared
+    - promlinter
+    - revive
+    - tagliatelle
+    - testpackage
+    - thelper
+    - unconvert
+    - unused
+    - unparam
+    - varnamelen
+    - wastedassign
+    - whitespace
+    - mnd         # replaces gomnd (magic number detector)
 
-    # Code quality
-    - bodyclose      # Check whether HTTP response body is closed
-    - contextcheck   # Check the function whether use a non-inherited context
-    - dupl           # Code clone detection
-    - errorlint      # Find code that will cause problems with the error wrapping scheme
-    - exhaustive     # Check exhaustiveness of enum switch statements
-    - gochecknoinits # Check that no init functions are present
-    - gocognit       # Compute and check the cognitive complexity of functions
-    - goconst        # Find repeated strings that could be replaced by a constant
-    - gocritic       # Provides diagnostics that check for bugs, performance and style issues
-    - gocyclo        # Compute and check the cyclomatic complexity of functions
-    - godot          # Check if comments end in a period
-    - gosec          # Inspect source code for security problems
-    - lll            # Report long lines
-    - makezero       # Find slice declarations with non-zero initial length
-    - misspell       # Find commonly misspelled English words in comments
-    - nakedret       # Find naked returns in functions greater than a specified function length
-    - nilerr         # Find the code that returns nil even if it checks that the error is not nil
-    - nilnil         # Check that there is no simultaneous return of nil error and an invalid value
-    - noctx          # Find sending http request without context.Context
-    - nolintlint     # Report ill-formed or insufficient nolint directives
-    - prealloc       # Find slice declarations that could potentially be pre-allocated
-    - predeclared    # Find code that shadows one of Go's predeclared identifiers
-    - revive         # Fast, configurable, extensible, flexible, and beautiful linter for Go
-    - tagliatelle    # Check the struct tags
-    - thelper        # Detect golang test helpers without t.Helper() call
-    - unconvert      # Remove unnecessary type conversions
-    - unparam        # Report unused function parameters
-    - wastedassign   # Find wasted assignment statements
-    - whitespace     # Tool for detection of leading and trailing whitespace
+  # Configuration for specific linters
+  settings:
+    govet:
+      check-shadowing: true
+      enable-all: true
+      disable:
+        - fieldalignment # can be too strict for readability
 
-    # Performance
-    - funlen         # Tool for detection of long functions
-    - gomnd          # Magic number detector (or 'mnd' in newer versions)
+    gocyclo:
+      min-complexity: 15
 
-    # Import organization
-    - goimports      # Check imports order and make it always deterministic
+    goconst:
+      min-len: 2
+      min-occurrences: 3
 
-    # Additional useful linters
-    - varnamelen     # Check the length of variable names
-    - testpackage    # Make sure that separate _test packages are used
+    misspell:
+      locale: US
 
-linters-settings:
-  govet:
-    check-shadowing: false
-    enable-all: false
-    enable:
-      - atomic
-      - bools
-      - buildtag
-      - copylocks
-      - errorsas
-      - httpresponse
-      - loopclosure
-      - lostcancel
-      - nilfunc
-      - printf
-      - shift
-      - stdmethods
-      - structtag
-      - tests
-      - unmarshal
-      - unreachable
-      - unsafeptr
-      - unusedresult
+    lll:
+      line-length: 120
 
-  gocyclo:
-    min-complexity: 15
+    unparam:
+      check-exported: false
 
-  goconst:
-    min-len: 3
-    min-occurrences: 3
+    nakedret:
+      max-func-lines: 30
 
-  misspell:
-    locale: US
+    prealloc:
+      simple: true
+      range-loops: true
+      for-loops: false
 
-  lll:
-    line-length: 120
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+      disabled-checks:
+        - dupImport # https://github.com/go-critic/go-critic/issues/845
+        - ifElseChain
+        - octalLiteral
+        - whyNoLint
 
-  unparam:
-    check-exported: false
+    funlen:
+      lines: 100
+      statements: 50
 
-  nakedret:
-    max-func-lines: 30
+    godox:
+      keywords:
+        - NOTE
+        - OPTIMIZE
+        - HACK
 
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-    disabled-checks:
-      - dupImport
-      - ifElseChain
-      - octalLiteral
-      - whyNoLint
-      - wrapperFunc
-      - importShadow
-      - unnamedResult
+    errorlint:
+      errorf: true
+      asserts: true
+      comparison: true
 
-  funlen:
-    lines: 80
-    statements: 40
+    exhaustive:
+      check-generated: false
+      default-signifies-exhaustive: false
 
-  gomnd:
-    settings:
-      mnd:
-        checks:
-          - argument
-          - case
-          - condition
-          - operation
-          - return
-          - assign
-        ignored-numbers:
-          - '0'
-          - '1'
-          - '2'
-          - '3'
-          - '10'
-          - '100'
-          - '1000'
-        ignored-functions:
-          - strings.SplitN
-          - make
+    godot:
+      scope: declarations
+      exclude:
+        - "^fixme:"
+        - "^todo:"
+      period: true
+      capital: false
 
-  gosec:
-    excludes:
-      - G204  # Subprocess launched with variable
-      - G301  # Poor file permissions used when creating a directory
-      - G302  # Poor file permissions used with chmod
-      - G304  # File path provided as taint input
-    exclude-generated: true
-    severity: "low"
-    confidence: "low"
+    # Renamed from gomnd to mnd
+    mnd:
+      checks: argument,case,condition,operation,return,assign
+      ignored-numbers: 0,1,2,3
+      ignored-functions: strings.SplitN
 
-  revive:
-    min-confidence: 0.8
-    rules:
-      - name: atomic
-      - name: line-length-limit
-        arguments: [140]
-      - name: time-naming
-      - name: var-declaration
-      - name: unexported-return
-      - name: errorf
-      - name: blank-imports
-      - name: context-as-argument
-      - name: dot-imports
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      # Disable exported function documentation requirement
-      # - name: exported
-      - name: if-return
-      - name: increment-decrement
-      - name: var-naming
-      # Disable package comment requirement
-      # - name: package-comments
-      - name: range
-      - name: receiver-naming
-      - name: indent-error-flow
-      - name: superfluous-else
+    gomodguard:
+      allowed:
+        modules: []
+        domains: []
+      blocked:
+        modules: []
+        versions: []
 
-  staticcheck:
-    checks: ["all"]
+    gosec:
+      includes:
+        - G401
+        - G306
+        - G101
+      excludes:
+        - G204 # Subprocess launched with variable
+      exclude-generated: true
+      severity: "low"
+      confidence: "low"
 
-  tagliatelle:
-    case:
+    importas:
+      no-unaliased: true
+      alias: []
+
+    ireturn:
+      allow:
+        - anon
+        - error
+        - empty
+        - stdlib
+
+    nilnil:
+      checked-types:
+        - ptr
+        - func
+        - iface
+        - map
+        - chan
+
+    nolintlint:
+      allow-leading-space: true
+      allow-unused: false
+      require-explanation: false
+      require-specific: false
+
+    revive:
+      min-confidence: 0.8
       rules:
-        json: snake
-        yaml: camel
-        xml: camel
-        bson: camel
-        avro: snake
-        mapstructure: kebab
+        - name: atomic
+        - name: line-length-limit
+          arguments: [140]
+        - name: time-naming
+        - name: var-declaration
+        - name: unexported-return
+        - name: errorf
+        - name: blank-imports
+        - name: context-as-argument
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: if-return
+        - name: increment-decrement
+        - name: var-naming
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: indent-error-flow
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: unused-parameter
 
-  varnamelen:
-    min-name-length: 2
-    ignore-type-assert-ok: true
-    ignore-map-index-ok: true
-    ignore-chan-recv-ok: true
-    ignore-names:
-      - err
-      - ok
-      - id
-      - i
-      - j
-      - k
-      - v
-      - t
-      - x
-      - y
-      - db
-      - tx
-      - w
-      - r
+    staticcheck:
+      checks: ["all"]
 
-  testpackage:
-    skip-regexp: (export|internal)_test\.go
+    tagliatelle:
+      case:
+        rules:
+          json: snake
+          yaml: camel
+          xml: camel
+          bson: camel
+          avro: snake
+          mapstructure: kebab
 
+    testpackage:
+      skip-regexp: (export|internal)_test\.go
+
+    thelper:
+      test:
+        first: true
+        name: true
+        begin: true
+      benchmark:
+        first: true
+        name: true
+        begin: true
+      tb:
+        first: true
+        name: true
+        begin: true
+
+    varnamelen:
+      min-name-length: 1
+      ignore-type-assert-ok: true
+      ignore-map-index-ok: true
+      ignore-chan-recv-ok: true
+      ignore-names:
+        - err
+        - ok
+        - id
+        - i
+        - j
+        - k
+        - v
+        - t
+        - x
+        - y
+
+# See the dedicated "formatters" documentation section.
+formatters:
+  gofumpt:
+    command: gofumpt
+    args: ["-w"]
+    lang-version: "1.24"
+    extra-rules: true
+
+  goimports:
+    command: goimports
+    args: ["-w", "-local", "github.com/tomiok/queuety"]
+
+# See the dedicated "issues" documentation section.
 issues:
   exclude-rules:
     # Exclude some linters from running on tests files
@@ -239,23 +290,8 @@ issues:
         - funlen
         - goconst
         - gocognit
-        - gomnd
+        - mnd  # updated from gomnd
         - lll
-        - varnamelen
-
-    # Exclude some linters from running on main.go files
-    - path: main\.go
-      linters:
-        - gochecknoinits
-
-    # Exclude godoc requirements
-    - linters:
-        - revive
-      text: "exported .* should have comment.*or be unexported"
-
-    - linters:
-        - govet
-      text: "exported .* should have comment"
 
     # Exclude some staticcheck messages
     - linters:
@@ -267,15 +303,8 @@ issues:
         - lll
       source: "^//go:generate "
 
-    # Exclude issues in vendor directory
-    - path: vendor
-      linters:
-        - errcheck
-        - gocritic
-        - gocyclo
-        - gosec
-
-  # Show issues from all files, not just changed files
+  # Show only new issues: if there are unstaged changes or untracked files,
+  # only those changes are analyzed, else only changes in HEAD~ are analyzed.
   new: false
 
   # Fix found issues (if it's supported by the linter)
@@ -287,26 +316,27 @@ issues:
   # Maximum count of issues with the same text. Set to 0 to disable. Default is 3.
   max-same-issues: 0
 
-# Output configuration options
+# Output configuration options.
 output:
-  format: colored-line-number
+  formats:
+    colored-line-number:
+      path: stdout
   print-issued-lines: true
   print-linter-name: true
   uniq-by-line: true
   sort-results: true
 
-# Severity configuration
+# See the dedicated "severity" documentation section.
 severity:
-  default-severity: error
+  default: error
   case-sensitive: false
   rules:
     - linters:
         - dupl
-        - gomnd
-        - lll
-      severity: warning
-
+      severity: info
     - linters:
         - gocritic
-        - varnamelen
+      severity: warning
+    - linters:
+        - godox
       severity: info

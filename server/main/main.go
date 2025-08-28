@@ -31,7 +31,7 @@ func main() {
 		panic(err)
 	}
 
-	log.Printf("Broker running on port %s \n Web server running on port %s \n",
+	log.Printf("broker running on port %s \n Web server running on port %s \n",
 		portBrokerDefault,
 		portWebDefault,
 	)
