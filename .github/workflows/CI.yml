@@ -67,6 +67,24 @@ jobs:
       - name: Download dependencies
         run: go mod download
 
+      - name: Install formatters
+        run: |
+          go install mvdan.cc/gofumpt@latest
+          go install golang.org/x/tools/cmd/goimports@latest
+
+      - name: Format code
+        run: |
+          gofumpt -w .
+          goimports -w -local github.com/tomiok/queuety .
+
+      - name: Check if formatting changed files
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Code formatting changes detected. Please run gofumpt and goimports locally."
+            git diff
+            exit 1
+          fi
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
         with:
