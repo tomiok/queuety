@@ -276,6 +276,18 @@ issues:
   max-issues-per-linter: 0
   max-same-issues: 0
 
+# See the dedicated "formatters" documentation section.
+formatters:
+  gofumpt:
+    command: gofumpt
+    args: ["-w"]
+    lang-version: "1.24"
+    extra-rules: true
+
+  goimports:
+    command: goimports
+    args: ["-w", "-local", "github.com/tomiok/queuety"]
+
 output:
   formats:
     - format: colored-line-number
@@ -283,3 +295,18 @@ output:
   print-linter-name: true
   uniq-by-line: true
   sort-results: true
+
+# See the dedicated "severity" documentation section.
+severity:
+  default-severity: error
+  case-sensitive: false
+  rules:
+    - linters:
+        - dupl
+      severity: info
+    - linters:
+        - gocritic
+      severity: warning
+    - linters:
+        - godox
+      severity: info
