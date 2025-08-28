@@ -1,9 +1,6 @@
 # golangci-lint v2 configuration
 # See https://golangci-lint.run/
 
-version: "2"
-
-# Options for analysis running.
 run:
   timeout: 5m
   issues-exit-code: 1
@@ -16,11 +13,9 @@ run:
     - ".*_gen\\.go$"
   go: "1.24"
 
-# See the dedicated "linters" documentation section.
 linters:
   disable-all: true
   enable:
-    # Enabled by default
     - errcheck
     - govet
     - ineffassign
@@ -65,15 +60,14 @@ linters:
     - varnamelen
     - wastedassign
     - whitespace
-    - mnd         # replaces gomnd (magic number detector)
+    - mnd
 
-# Configuration for specific linters
 linters-settings:
   govet:
     check-shadowing: true
     enable-all: true
     disable:
-      - fieldalignment # can be too strict for readability
+      - fieldalignment
 
   gocyclo:
     min-complexity: 15
@@ -107,7 +101,7 @@ linters-settings:
       - performance
       - style
     disabled-checks:
-      - dupImport # https://github.com/go-critic/go-critic/issues/845
+      - dupImport
       - ifElseChain
       - octalLiteral
       - whyNoLint
@@ -139,19 +133,10 @@ linters-settings:
     period: true
     capital: false
 
-  # Renamed from gomnd to mnd
   mnd:
     checks: argument,case,condition,operation,return,assign
     ignored-numbers: 0,1,2,3
     ignored-functions: strings.SplitN
-
-  gomodguard:
-    allowed:
-      modules: []
-      domains: []
-    blocked:
-      modules: []
-      versions: []
 
   gosec:
     includes:
@@ -159,7 +144,7 @@ linters-settings:
       - G306
       - G101
     excludes:
-      - G204 # Subprocess launched with variable
+      - G204
     exclude-generated: true
     severity: "low"
     confidence: "low"
@@ -264,10 +249,8 @@ linters-settings:
       - x
       - y
 
-# See the dedicated "issues" documentation section.
 issues:
   exclude-rules:
-    # Exclude some linters from running on tests files
     - path: _test\.go
       linters:
         - gocyclo
@@ -277,53 +260,26 @@ issues:
         - funlen
         - goconst
         - gocognit
-        - mnd  # updated from gomnd
+        - mnd
         - lll
 
-    # Exclude some staticcheck messages
     - linters:
         - staticcheck
       text: "SA9003:"
 
-    # Exclude lll issues for long lines with go:generate
     - linters:
         - lll
       source: "^//go:generate "
 
-  # Show only new issues: if there are unstaged changes or untracked files,
-  # only those changes are analyzed, else only changes in HEAD~ are analyzed.
   new: false
-
-  # Fix found issues (if it's supported by the linter)
   fix: false
-
-  # Maximum issues count per one linter. Set to 0 to disable. Default is 50.
   max-issues-per-linter: 0
-
-  # Maximum count of issues with the same text. Set to 0 to disable. Default is 3.
   max-same-issues: 0
 
-# Output configuration options.
 output:
   formats:
-    colored-line-number:
-      path: stdout
+    - format: colored-line-number
   print-issued-lines: true
   print-linter-name: true
   uniq-by-line: true
   sort-results: true
-
-# See the dedicated "severity" documentation section.
-severity:
-  default-severity: error
-  case-sensitive: false
-  rules:
-    - linters:
-        - dupl
-      severity: info
-    - linters:
-        - gocritic
-      severity: warning
-    - linters:
-        - godox
-      severity: info
