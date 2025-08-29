@@ -1,0 +1,18 @@
+global:
+  scrape_interval: 3s
+  evaluation_interval: 3s
+  scrape_timeout: 5s
+
+scrape_configs:
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 5s
+
+  - job_name: 'queuety'
+    static_configs:
+      - targets: ['queuety:9846']
+    scrape_interval: 10s
+    metrics_path: '/metrics'
+    scrape_timeout: 5s
+    honor_labels: true

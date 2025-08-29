@@ -155,23 +155,17 @@ func (s *Server) printStats() {
 }
 
 func (s *Server) handleConnections(conn net.Conn) {
-	_, span := observability.StartSpan(
-		context.Background(),
-		"handle_connections",
-		observability.WithSpanKind(trace.SpanKindServer),
-	)
-	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("recovered from panic in handleConnections: %v\n", r)
-			observability.EndSpan(span, fmt.Errorf("panic: %v", r))
-		}
-	}()
-	defer observability.EndSpan(span, nil)
-
-	observability.AddSpanAttributes(span,
+	ctx := context.Background()
+	defer observability.StartSpanWithAttributes(ctx, "handle_connections", trace.SpanKindServer,
 		observability.StringAttribute("client.remote_addr", conn.RemoteAddr().String()),
 		observability.StringAttribute("client.local_addr", conn.LocalAddr().String()),
-	)
+	)()
+
+	// Crear un contexto con el span para propagar a las funciones hijas
+	spanCtx := trace.SpanContextFromContext(ctx)
+	if spanCtx.IsValid() {
+		ctx = trace.ContextWithSpanContext(ctx, spanCtx)
+	}
 
 	s.mu.Lock()
 	s.activeConnections++
@@ -201,32 +195,25 @@ func (s *Server) handleConnections(conn net.Conn) {
 
 		switch s.format {
 		case MessageFormatJSON:
-			s.handleJSON(conn, buff[:i])
+			s.handleJSON(ctx, conn, buff[:i])
 		}
 	}
 }
 
-func (s *Server) handleJSON(conn net.Conn, buff []byte) {
-	_, span := observability.StartSpan(
-		context.Background(),
-		"handle_json_message",
-		observability.WithSpanKind(trace.SpanKindServer),
-	)
-	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("recovered from panic in handleJSON: %v\n", r)
-			observability.EndSpan(span, fmt.Errorf("panic: %v", r))
-		}
-	}()
-	defer observability.EndSpan(span, nil)
+func (s *Server) handleJSON(ctx context.Context, conn net.Conn, buff []byte) {
+	var err error
+	span, deferFn := observability.SpanWithAttributesAndError(ctx, "handle_json_message", trace.SpanKindServer)
+	defer deferFn(&err)
 
 	startTime := time.Now()
-	msg, err := DecodeMessage(buff)
-	if err != nil {
-		log.Printf("cannot parse message %v \n", err)
+	msg, decodeErr := DecodeMessage(buff)
+	if decodeErr != nil {
+		log.Printf("cannot parse message %v \n", decodeErr)
+		err = decodeErr
 		return
 	}
 
+	// Agregar atributos dinámicos
 	observability.AddSpanAttributes(span,
 		observability.StringAttribute("topic.name", msg.Topic().Name),
 	)
@@ -252,6 +239,7 @@ func (s *Server) handleJSON(conn net.Conn, buff []byte) {
 		operation = "unknown"
 	}
 
+	// Agregar el atributo de operación
 	observability.AddSpanAttributes(span,
 		observability.StringAttribute("operation", operation),
 	)
@@ -261,14 +249,8 @@ func (s *Server) handleJSON(conn net.Conn, buff []byte) {
 }
 
 func (s *Server) sendNewMessage(message Message) {
-	_, span := observability.StartSpan(
-		context.Background(),
-		"send_message",
-		observability.WithSpanKind(trace.SpanKindProducer),
-	)
-	defer func() {
-		observability.EndSpan(span, nil)
-	}()
+	_, span := observability.StartSpan(context.Background(), "send_message", observability.WithSpanKind(trace.SpanKindProducer))
+	defer observability.EndSpan(span, nil)
 
 	observability.AddSpanAttributes(span,
 		observability.StringAttribute("topic.name", message.Topic().Name),
@@ -287,12 +269,14 @@ func (s *Server) sendNewMessage(message Message) {
 	for _, conn := range clients {
 		b, err := message.Marshall()
 		if err != nil {
+			observability.RecordSpanError(span, err)
 			return
 		}
 
 		_, err = conn.Write(b)
 		if err != nil {
 			log.Printf("cannot write in connection: %v message\n", err)
+			observability.RecordSpanError(span, err)
 
 			observability.IncrementFailedMessages(message.Topic().Name)
 			saveUnsentMessage(message, s.save)
@@ -310,14 +294,8 @@ func (s *Server) sendNewMessage(message Message) {
 }
 
 func (s *Server) doLogin(conn net.Conn, message Message) {
-	_, span := observability.StartSpan(
-		context.Background(),
-		"do_login",
-		observability.WithSpanKind(trace.SpanKindServer),
-	)
-	defer func() {
-		observability.EndSpan(span, nil)
-	}()
+	_, span := observability.StartSpan(context.Background(), "do_login", observability.WithSpanKind(trace.SpanKindServer))
+	defer observability.EndSpan(span, nil)
 
 	observability.AddSpanAttributes(span,
 		observability.StringAttribute("user.attempt", message.User()),
@@ -329,6 +307,7 @@ func (s *Server) doLogin(conn net.Conn, message Message) {
 		message.updateAuthSuccess() // no auth need means successful.
 		b, err := message.Marshall()
 		if err != nil {
+			observability.RecordSpanError(span, err)
 			// just close the connection.
 			_ = conn.Close()
 			return
@@ -341,6 +320,7 @@ func (s *Server) doLogin(conn net.Conn, message Message) {
 		message.updateAuthFailed()
 		b, err := message.Marshall()
 		if err != nil {
+			observability.RecordSpanError(span, err)
 			// just close the connection.
 			_ = conn.Close()
 			return
@@ -369,23 +349,22 @@ func (s *Server) needAuth() bool {
 }
 
 func (s *Server) save(message Message) {
+	_, span := observability.StartSpan(context.Background(), "save_message", observability.WithSpanKind(trace.SpanKindInternal))
+	defer observability.EndSpan(span, nil)
+
+	observability.AddSpanAttributes(span,
+		observability.StringAttribute("message.id", message.ID()),
+		observability.StringAttribute("topic.name", message.Topic().Name),
+	)
+
 	if err := s.DB.saveMessage(message); err != nil {
 		log.Printf("cannot save message with id %s, %v\n", message.ID(), err)
+		observability.RecordSpanError(span, err)
 	}
 }
 
 func (s *Server) addNewSubscriber(conn net.Conn, topic Topic) {
-	_, span := observability.StartSpan(
-		context.Background(),
-		"add_subscriber",
-		observability.WithSpanKind(trace.SpanKindInternal),
-	)
-	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("recovered from panic in addNewSubscriber: %v\n", r)
-			observability.EndSpan(span, fmt.Errorf("panic: %v", r))
-		}
-	}()
+	_, span := observability.StartSpan(context.Background(), "add_subscriber", observability.WithSpanKind(trace.SpanKindInternal))
 	defer observability.EndSpan(span, nil)
 
 	observability.AddSpanAttributes(span,
@@ -398,17 +377,7 @@ func (s *Server) addNewSubscriber(conn net.Conn, topic Topic) {
 }
 
 func (s *Server) addNewTopic(name string) {
-	_, span := observability.StartSpan(
-		context.Background(),
-		"add_topic",
-		observability.WithSpanKind(trace.SpanKindInternal),
-	)
-	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("recovered from panic in addNewTopic: %v\n", r)
-			observability.EndSpan(span, fmt.Errorf("panic: %v", r))
-		}
-	}()
+	_, span := observability.StartSpan(context.Background(), "add_topic", observability.WithSpanKind(trace.SpanKindInternal))
 	defer observability.EndSpan(span, nil)
 
 	observability.AddSpanAttributes(span,
@@ -421,17 +390,7 @@ func (s *Server) addNewTopic(name string) {
 }
 
 func (s *Server) ack(message Message) {
-	_, span := observability.StartSpan(
-		context.Background(),
-		"message_ack",
-		observability.WithSpanKind(trace.SpanKindInternal),
-	)
-	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("recovered from panic in ack: %v\n", r)
-			observability.EndSpan(span, fmt.Errorf("panic: %v", r))
-		}
-	}()
+	_, span := observability.StartSpan(context.Background(), "message_ack", observability.WithSpanKind(trace.SpanKindInternal))
 	defer observability.EndSpan(span, nil)
 
 	observability.AddSpanAttributes(span,
@@ -441,21 +400,12 @@ func (s *Server) ack(message Message) {
 
 	if err := s.DB.updateMessageACK(message); err != nil {
 		log.Printf("cannot ACK message with id %s, %v\n", message.ID(), err)
+		observability.RecordSpanError(span, err)
 	}
 }
 
 func (s *Server) disconnect(conn net.Conn) {
-	_, span := observability.StartSpan(
-		context.Background(),
-		"disconnect",
-		observability.WithSpanKind(trace.SpanKindServer),
-	)
-	defer func() {
-		if r := recover(); r != nil {
-			log.Printf("recovered from panic in disconnect: %v\n", r)
-			observability.EndSpan(span, fmt.Errorf("panic: %v", r))
-		}
-	}()
+	_, span := observability.StartSpan(context.Background(), "disconnect", observability.WithSpanKind(trace.SpanKindServer))
 	defer observability.EndSpan(span, nil)
 
 	observability.AddSpanAttributes(span,
