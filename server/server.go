@@ -1,7 +1,10 @@
 package server
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -146,28 +149,41 @@ func (s *Server) printStats() {
 
 func (s *Server) handleConnections(conn net.Conn) {
 	for {
-		buff := make([]byte, 2048)
-
-		i, err := conn.Read(buff)
+		lengthBuff := make([]byte, 4)
+		messageLength := binary.LittleEndian.Uint32(lengthBuff)
+		_, err := io.ReadFull(conn, lengthBuff)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				s.disconnect(conn)
 				break
 			}
+			log.Printf("cannot read message length %v \n", err)
+			continue
+		}
 
-			log.Printf("cannot read message %v \n", err)
+		err = binary.Read(bytes.NewReader(lengthBuff), binary.LittleEndian, &messageLength)
+		if err != nil {
+			log.Printf("cannot decode message length %v \n", err)
+			continue
+		}
+
+		messageBuff := make([]byte, int(messageLength))
+		_, err = io.ReadFull(conn, messageBuff)
+		if err != nil {
+			log.Printf("cannot read message body %v \n", err)
 			continue
 		}
 
 		switch s.format {
 		case MessageFormatJSON:
-			s.handleJSON(conn, buff[:i])
+			s.handleJSON(conn, messageBuff)
 		}
 	}
 }
 
 func (s *Server) handleJSON(conn net.Conn, buff []byte) {
 	msg, err := DecodeMessage(buff)
+	fmt.Printf("decoded message %s\n", msg.body)
 	if err != nil {
 		log.Printf("cannot parse message %v \n", err)
 

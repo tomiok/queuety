@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -133,6 +134,7 @@ func (q *QConn) PublishJSON(t server.Topic, msg []byte) error {
 		WithAck(false).
 		Build()
 
+	fmt.Printf("sending %v\n", m)
 	return q.qWrite(m)
 }
 
@@ -259,6 +261,11 @@ func (q *QConn) qWrite(m server.Message) error {
 func (q *QConn) writeMessage(m server.Message) error {
 	b, err := m.Marshall()
 	if err != nil {
+		return err
+	}
+
+	length := uint32(len(b))
+	if err = binary.Write(q.c, binary.LittleEndian, length); err != nil {
 		return err
 	}
 
