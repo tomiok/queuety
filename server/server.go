@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -15,10 +14,16 @@ import (
 	"github.com/dgraph-io/badger/v4"
 )
 
+type MessageFormat byte
+
+const (
+	FormatJSON   MessageFormat = 0x01
+	FormatBinary MessageFormat = 0x02
+)
+
 type Server struct {
 	protocol string
 	port     string
-	format   string
 
 	clients map[Topic][]net.Conn
 	window  *time.Ticker
@@ -73,7 +78,6 @@ func NewServer(c Config) (*Server, error) {
 	return &Server{
 		protocol: c.Protocol,
 		port:     c.Port,
-		format:   MessageFormatJSON,
 		clients:  make(map[Topic][]net.Conn),
 		window:   time.NewTicker(time.Second * 3600),
 		DB:       BadgerDB{DB: db},
@@ -149,9 +153,22 @@ func (s *Server) printStats() {
 
 func (s *Server) handleConnections(conn net.Conn) {
 	for {
+		// Read format flag (1 byte)
+		formatBuff := make([]byte, 1)
+		_, err := io.ReadFull(conn, formatBuff)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				s.disconnect(conn)
+				break
+			}
+			log.Printf("cannot read format flag %v \n", err)
+			continue
+		}
+		format := MessageFormat(formatBuff[0])
+
+		// Read length (4 bytes)
 		lengthBuff := make([]byte, 4)
-		messageLength := binary.LittleEndian.Uint32(lengthBuff)
-		_, err := io.ReadFull(conn, lengthBuff)
+		_, err = io.ReadFull(conn, lengthBuff)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				s.disconnect(conn)
@@ -160,36 +177,48 @@ func (s *Server) handleConnections(conn net.Conn) {
 			log.Printf("cannot read message length %v \n", err)
 			continue
 		}
+		messageLength := binary.LittleEndian.Uint32(lengthBuff)
 
-		err = binary.Read(bytes.NewReader(lengthBuff), binary.LittleEndian, &messageLength)
-		if err != nil {
-			log.Printf("cannot decode message length %v \n", err)
-			continue
-		}
-
-		messageBuff := make([]byte, int(messageLength))
+		// Read message payload
+		messageBuff := make([]byte, messageLength)
 		_, err = io.ReadFull(conn, messageBuff)
 		if err != nil {
 			log.Printf("cannot read message body %v \n", err)
 			continue
 		}
 
-		switch s.format {
-		case MessageFormatJSON:
-			s.handleJSON(conn, messageBuff)
-		}
+		// Handle message based on detected format
+		s.handleMessage(conn, messageBuff, format)
 	}
 }
 
-func (s *Server) handleJSON(conn net.Conn, buff []byte) {
-	msg, err := DecodeMessage(buff)
-	fmt.Printf("decoded message %s\n", msg.body)
-	if err != nil {
-		log.Printf("cannot parse message %v \n", err)
+func (s *Server) handleMessage(conn net.Conn, buff []byte, format MessageFormat) {
+	var msg Message
+	var err error
 
+	switch format {
+	case FormatJSON:
+		msg, err = DecodeMessage(buff)
+		if err != nil {
+			log.Printf("cannot parse JSON message %v \n", err)
+			return
+		}
+		fmt.Printf("decoded JSON message %s\n", msg.body)
+
+	case FormatBinary:
+		err = msg.UnmarshalBinary(buff)
+		if err != nil {
+			log.Printf("cannot parse binary message %v \n", err)
+			return
+		}
+		fmt.Printf("decoded binary message %s\n", msg.body)
+
+	default:
+		log.Printf("unknown message format: %d \n", format)
 		return
 	}
 
+	// Same message handling logic for both formats
 	switch msg.Type() {
 	case MessageTypeNewTopic:
 		s.addNewTopic(msg.Topic().Name)

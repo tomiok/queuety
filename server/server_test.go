@@ -47,7 +47,6 @@ func Test_Server(t *testing.T) {
 		port:     ":60123",
 		clients:  map[Topic][]net.Conn{},
 		window:   time.NewTicker(time.Minute * 10), // IDK, hope is the same.
-		format:   MessageFormatJSON,
 		DB: BadgerDB{
 			DB: db,
 		},

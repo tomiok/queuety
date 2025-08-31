@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"time"
@@ -13,8 +14,16 @@ import (
 	"github.com/tomiok/queuety/server"
 )
 
+type MessageFormat byte
+
+const (
+	FormatJSON   MessageFormat = 0x01
+	FormatBinary MessageFormat = 0x02
+)
+
 type QConn struct {
-	c net.Conn
+	c             net.Conn
+	defaultFormat MessageFormat
 }
 
 type Auth struct {
@@ -29,7 +38,8 @@ func Connect(protocol, addr string, auth *Auth) (*QConn, error) {
 	}
 
 	qConn := QConn{
-		conn,
+		c:             conn,
+		defaultFormat: FormatJSON, // Default to JSON for backward compatibility
 	}
 
 	if auth != nil {
@@ -41,12 +51,10 @@ func Connect(protocol, addr string, auth *Auth) (*QConn, error) {
 			WithTimestamp(time.Now().Unix()).
 			Build()
 
-		b, _err := msg.Marshall()
-		if _err != nil {
-			return nil, _err
+		err = qConn.writeMessageWithFormat(msg, FormatJSON)
+		if err != nil {
+			return nil, err
 		}
-
-		_, _ = conn.Write(b)
 
 		// listen to the message back.
 		buff := make([]byte, 1024)
@@ -68,6 +76,10 @@ func Connect(protocol, addr string, auth *Auth) (*QConn, error) {
 	}
 
 	return &qConn, nil
+}
+
+func (q *QConn) SetDefaultFormat(format MessageFormat) {
+	q.defaultFormat = format
 }
 
 func (q *QConn) NewTopic(name string) (server.Topic, error) {
@@ -138,6 +150,22 @@ func (q *QConn) PublishJSON(t server.Topic, msg []byte) error {
 	return q.qWrite(m)
 }
 
+func (q *QConn) PublishBinary(t server.Topic, msg []byte) error {
+	nextID := generateNextID()
+
+	m := server.NewMessageBuilder().
+		WithID(generateID(server.MsgPrefixFalse, nextID)).
+		WithNextID(nextID).
+		WithType(server.MessageTypeNew).
+		WithTopic(t).
+		WithBody(msg).
+		WithTimestamp(time.Now().Unix()).
+		WithAck(false).
+		Build()
+
+	return q.writeMessageWithFormat(m, FormatBinary)
+}
+
 // ConsumeJSON will be used for type-safety. Is a generic function.
 // Both publish types has the ergonomics to send body as JSON and the string representation.
 // In this case, is just easier to reuse or replicate the JSON structure.
@@ -183,6 +211,7 @@ func ConsumeJSON[T any](q *QConn, topic server.Topic) <-chan T {
 // Both publish types has the ergonomics to send body as JSON and the string representation.
 // Consumer must be aware of which type is the publisher sending but is split in diff methods for simplicity and
 // will be compatible in the future if any change is included.
+// Replace the existing Consume function in manager.go with this:
 func Consume(q *QConn, topic server.Topic) <-chan string {
 	if err := q.subscribe(topic); err != nil {
 		log.Printf("cannot sub %v\n", err)
@@ -193,23 +222,42 @@ func Consume(q *QConn, topic server.Topic) <-chan string {
 	go func() {
 		defer close(ch)
 		for {
-			b := make([]byte, 1024)
-			n, err := q.c.Read(b)
+			// Read format flag (1 byte)
+			formatBuff := make([]byte, 1)
+			_, err := io.ReadFull(q.c, formatBuff)
 			if err != nil {
-				log.Printf("cannot read messege %v \n", err)
+				log.Printf("cannot read format flag %v \n", err)
 				continue
 			}
 
-			if n > 0 {
-				msg, err := getMessage(b[:n])
-				if err != nil {
-					log.Printf("cannot get messege %v \n", err)
-					continue
-				}
-
-				ch <- msg.BodyString()
-				q.updateMessage(msg)
+			// Read length (4 bytes)
+			lengthBuff := make([]byte, 4)
+			_, err = io.ReadFull(q.c, lengthBuff)
+			if err != nil {
+				log.Printf("cannot read message length %v \n", err)
+				continue
 			}
+			messageLength := binary.LittleEndian.Uint32(lengthBuff)
+
+			// Read payload
+			payload := make([]byte, messageLength)
+			_, err = io.ReadFull(q.c, payload)
+			if err != nil {
+				log.Printf("cannot read message payload %v \n", err)
+				continue
+			}
+
+			// Unmarshal binary message
+			msg := server.Message{}
+			err = msg.UnmarshalBinary(payload)
+			if err != nil {
+				log.Printf("cannot unmarshal binary message %v \n", err)
+				continue
+			}
+
+			fmt.Printf("%v\n", msg)
+			ch <- msg.BodyString()
+			q.updateMessage(msg)
 		}
 	}()
 
@@ -227,7 +275,6 @@ func (q *QConn) subscribe(t server.Topic) error {
 		WithAck(false).
 		Build()
 
-	log.Printf("sending sub\n")
 	return q.qWrite(m)
 }
 
@@ -259,17 +306,39 @@ func (q *QConn) qWrite(m server.Message) error {
 }
 
 func (q *QConn) writeMessage(m server.Message) error {
-	b, err := m.Marshall()
+	return q.writeMessageWithFormat(m, q.defaultFormat)
+}
+
+func (q *QConn) writeMessageWithFormat(m server.Message, format MessageFormat) error {
+	var payload []byte
+	var err error
+
+	switch format {
+	case FormatJSON:
+		payload, err = m.Marshall()
+	case FormatBinary:
+		payload, err = m.MarshalBinary()
+	default:
+		return fmt.Errorf("unsupported format: %d", format)
+	}
+
 	if err != nil {
 		return err
 	}
 
-	length := uint32(len(b))
+	// Write format flag (1 byte)
+	if err = binary.Write(q.c, binary.LittleEndian, format); err != nil {
+		return err
+	}
+
+	// Write length (4 bytes)
+	length := uint32(len(payload))
 	if err = binary.Write(q.c, binary.LittleEndian, length); err != nil {
 		return err
 	}
 
-	_, err = q.c.Write(b)
+	// Write payload
+	_, err = q.c.Write(payload)
 	return err
 }
 
