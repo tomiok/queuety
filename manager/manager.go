@@ -146,7 +146,6 @@ func (q *QConn) PublishJSON(t server.Topic, msg []byte) error {
 		WithAck(false).
 		Build()
 
-	fmt.Printf("sending %v\n", m)
 	return q.qWrite(m)
 }
 
@@ -182,14 +181,14 @@ func ConsumeJSON[T any](q *QConn, topic server.Topic) <-chan T {
 			b := make([]byte, 1024)
 			n, err := q.c.Read(b)
 			if err != nil {
-				log.Printf("cannot read messege %v \n", err)
+				log.Printf("cannot read message %v \n", err)
 				continue
 			}
 
 			if n > 0 {
 				msg, err := server.DecodeMessage(b[:n])
 				if err != nil {
-					log.Printf("cannot get messege %v \n", err)
+					log.Printf("cannot get message %v \n", err)
 					continue
 				}
 
@@ -229,6 +228,8 @@ func Consume(q *QConn, topic server.Topic) <-chan string {
 				log.Printf("cannot read format flag %v \n", err)
 				continue
 			}
+			format := MessageFormat(formatBuff[0])
+			fmt.Printf("DEBUG: Format flag = %d\n", format)
 
 			// Read length (4 bytes)
 			lengthBuff := make([]byte, 4)
@@ -238,14 +239,25 @@ func Consume(q *QConn, topic server.Topic) <-chan string {
 				continue
 			}
 			messageLength := binary.LittleEndian.Uint32(lengthBuff)
+			fmt.Printf("DEBUG: Message length = %d\n", messageLength)
+
+			// SAFETY CHECK - prevent huge allocations
+			if messageLength > 10*1024*1024 { // 10MB max
+				log.Printf("Message length too large: %d bytes, skipping\n", messageLength)
+				continue
+			}
+
+			// Always process as binary (no format check)
 
 			// Read payload
 			payload := make([]byte, messageLength)
+			fmt.Printf("DEBUG: About to read payload of %d bytes\n", messageLength)
 			_, err = io.ReadFull(q.c, payload)
 			if err != nil {
 				log.Printf("cannot read message payload %v \n", err)
 				continue
 			}
+			fmt.Printf("DEBUG: Successfully read payload\n")
 
 			// Unmarshal binary message
 			msg := server.Message{}
@@ -255,7 +267,7 @@ func Consume(q *QConn, topic server.Topic) <-chan string {
 				continue
 			}
 
-			fmt.Printf("%v\n", msg)
+			fmt.Printf("DEBUG: Unmarshaled message: %+v\n", msg)
 			ch <- msg.BodyString()
 			q.updateMessage(msg)
 		}
@@ -340,16 +352,6 @@ func (q *QConn) writeMessageWithFormat(m server.Message, format MessageFormat) e
 	// Write payload
 	_, err = q.c.Write(payload)
 	return err
-}
-
-func getMessage(b []byte) (server.Message, error) {
-	msg := server.Message{}
-	err := msg.Unmarshal(b)
-	if err != nil {
-		return server.Message{}, err
-	}
-
-	return msg, nil
 }
 
 func generateNextID() string {

@@ -46,11 +46,11 @@ func (s *Server) handleStats(w http.ResponseWriter, _ *http.Request) {
 
 	conns := make(map[net.Conn]bool)
 
-	for topic, cc := range s.clients {
-		for _, c := range cc {
-			_, ok := conns[c]
+	for topic, clients := range s.clients {
+		for _, c := range clients {
+			_, ok := conns[c.conn]
 			if !ok {
-				conns[c] = true
+				conns[c.conn] = true
 				stats.Connections.TotalConnected++
 			}
 		}
@@ -60,7 +60,7 @@ func (s *Server) handleStats(w http.ResponseWriter, _ *http.Request) {
 			sentMsgs := s.sentMessages[topic]
 
 			stats.Topics[topic.Name] = topicDetail{
-				Subscribers:  len(cc),
+				Subscribers:  len(clients),
 				MessagesSent: sentMsgs.Load(),
 			}
 		}

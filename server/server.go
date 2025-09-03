@@ -25,7 +25,7 @@ type Server struct {
 	protocol string
 	port     string
 
-	clients map[Topic][]net.Conn
+	clients map[Topic][]Client
 	window  *time.Ticker
 
 	User     string
@@ -55,6 +55,11 @@ type Auth struct {
 	Password string // not encrypted.
 }
 
+type Client struct {
+	conn   net.Conn
+	Format MessageFormat
+}
+
 func NewServer(c Config) (*Server, error) {
 	db, err := NewBadger(c.BadgerPath, c.InMemoryData)
 	if err != nil {
@@ -78,7 +83,7 @@ func NewServer(c Config) (*Server, error) {
 	return &Server{
 		protocol: c.Protocol,
 		port:     c.Port,
-		clients:  make(map[Topic][]net.Conn),
+		clients:  make(map[Topic][]Client),
 		window:   time.NewTicker(time.Second * 3600),
 		DB:       BadgerDB{DB: db},
 		User:     user,
@@ -211,21 +216,20 @@ func (s *Server) handleMessage(conn net.Conn, buff []byte, format MessageFormat)
 			log.Printf("cannot parse binary message %v \n", err)
 			return
 		}
-		fmt.Printf("decoded binary message %s\n", msg.body)
 
 	default:
 		log.Printf("unknown message format: %d \n", format)
 		return
 	}
 
-	// Same message handling logic for both formats
+	// same message handling logic for both formats
 	switch msg.Type() {
 	case MessageTypeNewTopic:
 		s.addNewTopic(msg.Topic().Name)
 	case MessageTypeNew:
 		s.sendNewMessage(msg)
 	case MessageTypeNewSubscriber:
-		s.addNewSubscriber(conn, msg.Topic())
+		s.addNewSubscriber(conn, msg.Topic(), format)
 	case MessageTypeACK:
 		s.ack(msg)
 	case MessageTypeAuth:
@@ -241,29 +245,48 @@ func (s *Server) sendNewMessage(message Message) {
 	}
 
 	// write for all the clients/connections
-	for _, conn := range clients {
-		b, err := message.Marshall()
+	var payload []byte
+	var err error
+
+	for _, client := range clients {
+		if FormatJSON == client.Format {
+			payload, err = message.Marshall()
+		} else {
+			payload, err = message.MarshalBinary()
+		}
+
 		if err != nil {
-			log.Printf("cannot marshall message: %v\n", err) // unclear error, don't want to re-intent.
+			log.Printf("cannot marshall message: %v\n", err)
 			return
 		}
 
-		_, err = conn.Write(b)
+		err = binary.Write(client.conn, binary.LittleEndian, client.Format)
 		if err != nil {
-			log.Printf("cannot write in connection: %v message\n", err)
-			saveUnsentMessage(message, s.save)
+			log.Printf("cannot write format flag: %v\n", err)
+			return
+		}
+
+		length := uint32(len(payload))
+		err = binary.Write(client.conn, binary.LittleEndian, length)
+		if err != nil {
+			log.Printf("cannot write length: %v\n", err)
+			return
+		}
+
+		_, err = client.conn.Write(payload)
+		if err != nil {
+			log.Printf("cannot write payload: %v\n", err)
+			saveUnsentMessage(message, client.Format, s.save)
 			return
 		}
 
 		if message.attempts <= 1 {
-			s.save(message)
+			s.save(message, client.Format)
 		}
 
-		// check if the message was saved
 		s.incSentMessages(message.Topic())
 	}
 }
-
 func (s *Server) doLogin(conn net.Conn, message Message) {
 	if !s.needAuth() {
 		message.updateAuthSuccess() // no auth need means successful.
@@ -314,18 +337,21 @@ func (s *Server) needAuth() bool {
 	return false
 }
 
-func (s *Server) save(message Message) {
-	if err := s.DB.saveMessage(message); err != nil {
+func (s *Server) save(message Message, format MessageFormat) {
+	if err := s.DB.saveMessage(message, format); err != nil {
 		log.Printf("cannot save message with id %s, %v\n", message.ID(), err)
 	}
 }
 
-func (s *Server) addNewSubscriber(conn net.Conn, topic Topic) {
-	s.clients[topic] = append(s.clients[topic], conn)
+func (s *Server) addNewSubscriber(conn net.Conn, topic Topic, format MessageFormat) {
+	s.clients[topic] = append(s.clients[topic], Client{
+		conn:   conn,
+		Format: format,
+	})
 }
 
 func (s *Server) addNewTopic(name string) {
-	s.clients[NewTopic(name)] = []net.Conn{}
+	s.clients[NewTopic(name)] = []Client{}
 }
 
 func (s *Server) ack(message Message) {
@@ -337,7 +363,7 @@ func (s *Server) ack(message Message) {
 func (s *Server) disconnect(conn net.Conn) {
 	for topic, clients := range s.clients {
 		for i, client := range clients {
-			if client == conn {
+			if client.conn == conn {
 				s.clients[topic] = append(clients[:i], clients[i+1:]...)
 				log.Printf("client removed in topic: %s", topic.Name)
 				break
@@ -356,7 +382,7 @@ func (s *Server) disconnect(conn net.Conn) {
 	}
 }
 
-func saveUnsentMessage(msg Message, saveFn func(m Message)) {
+func saveUnsentMessage(msg Message, format MessageFormat, saveFn func(Message, MessageFormat)) {
 	msg.IncAttempts()
-	saveFn(msg)
+	saveFn(msg, format)
 }

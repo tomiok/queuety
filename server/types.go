@@ -113,7 +113,7 @@ func (m *Message) Attempts() int {
 }
 
 func (m *Message) IncAttempts() {
-	m.attempts += 1
+	m.attempts++
 }
 
 func (m *Message) updateACK() {
@@ -195,6 +195,7 @@ func DecodeMessage(b []byte) (Message, error) {
 	if err := json.NewDecoder(r).Decode(&mJSON); err != nil {
 		return Message{}, err
 	}
+	
 	return Message{
 		id:         mJSON.ID,
 		nextID:     mJSON.NextID,
@@ -275,56 +276,87 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 
 	// Write ID length + ID
 	idBytes := []byte(m.id)
-	binary.Write(buf, binary.LittleEndian, uint16(len(idBytes)))
+	if err := binary.Write(buf, binary.LittleEndian, uint16(len(idBytes))); err != nil {
+		return nil, err
+	}
+
 	buf.Write(idBytes)
 
 	// Write NextID length + NextID
 	nextIDBytes := []byte(m.nextID)
-	binary.Write(buf, binary.LittleEndian, uint16(len(nextIDBytes)))
+	if err := binary.Write(buf, binary.LittleEndian, uint16(len(nextIDBytes))); err != nil {
+		return nil, err
+	}
+
 	buf.Write(nextIDBytes)
 
 	// Write Type length + Type
 	typeBytes := []byte(m.mType)
-	binary.Write(buf, binary.LittleEndian, uint16(len(typeBytes)))
+	if err := binary.Write(buf, binary.LittleEndian, uint16(len(typeBytes))); err != nil {
+		return nil, err
+	}
+
 	buf.Write(typeBytes)
 
 	// Write User length + User
 	userBytes := []byte(m.user)
-	binary.Write(buf, binary.LittleEndian, uint16(len(userBytes)))
+	if err := binary.Write(buf, binary.LittleEndian, uint16(len(userBytes))); err != nil {
+		return nil, err
+	}
+
 	buf.Write(userBytes)
 
 	// Write Password length + Password
 	passwordBytes := []byte(m.password)
-	binary.Write(buf, binary.LittleEndian, uint16(len(passwordBytes)))
+	if err := binary.Write(buf, binary.LittleEndian, uint16(len(passwordBytes))); err != nil {
+		return nil, err
+	}
+
 	buf.Write(passwordBytes)
 
 	// Write Topic name length + Topic name
 	topicBytes := []byte(m.topic.Name)
-	binary.Write(buf, binary.LittleEndian, uint16(len(topicBytes)))
+	if err := binary.Write(buf, binary.LittleEndian, uint16(len(topicBytes))); err != nil {
+		return nil, err
+	}
+
 	buf.Write(topicBytes)
 
 	// Write Body length + Body
 	bodyBytes := []byte(m.body)
-	binary.Write(buf, binary.LittleEndian, uint32(len(bodyBytes)))
+	if err := binary.Write(buf, binary.LittleEndian, uint32(len(bodyBytes))); err != nil {
+		return nil, err
+	}
+
 	buf.Write(bodyBytes)
 
 	// Write BodyString length + BodyString
 	bodyStringBytes := []byte(m.bodyString)
-	binary.Write(buf, binary.LittleEndian, uint32(len(bodyStringBytes)))
+	if err := binary.Write(buf, binary.LittleEndian, uint32(len(bodyStringBytes))); err != nil {
+		return nil, err
+	}
+
 	buf.Write(bodyStringBytes)
 
 	// Write Timestamp (8 bytes)
-	binary.Write(buf, binary.LittleEndian, m.timestamp)
+	if err := binary.Write(buf, binary.LittleEndian, m.timestamp); err != nil {
+		return nil, err
+	}
 
 	// Write ACK (1 byte)
 	ackByte := byte(0)
 	if m.ack {
 		ackByte = 1
 	}
-	binary.Write(buf, binary.LittleEndian, ackByte)
+
+	if err := binary.Write(buf, binary.LittleEndian, ackByte); err != nil {
+		return nil, err
+	}
 
 	// Write Attempts (4 bytes)
-	binary.Write(buf, binary.LittleEndian, int32(m.attempts))
+	if err := binary.Write(buf, binary.LittleEndian, int32(m.attempts)); err != nil {
+		return nil, err
+	}
 
 	return buf.Bytes(), nil
 }
@@ -355,7 +387,7 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 	}
 	m.nextID = string(nextIDBytes)
 
-	// Read Type
+	// Read Format
 	var typeLen uint16
 	if err := binary.Read(buf, binary.LittleEndian, &typeLen); err != nil {
 		return err
