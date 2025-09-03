@@ -45,9 +45,8 @@ func Test_Server(t *testing.T) {
 	srv := Server{
 		protocol: "tcp",
 		port:     ":60123",
-		clients:  map[Topic][]net.Conn{},
+		clients:  map[Topic][]Client{},
 		window:   time.NewTicker(time.Minute * 10), // IDK, hope is the same.
-		format:   MessageFormatJSON,
 		DB: BadgerDB{
 			DB: db,
 		},
@@ -69,7 +68,7 @@ func Test_Server(t *testing.T) {
 	conn, err := net.Dial("tcp", ":60123")
 	topic := NewTopic("test-topic")
 	srv.addNewTopic("test-topic")
-	srv.addNewSubscriber(conn, topic)
+	srv.addNewSubscriber(conn, topic, FormatJSON)
 
 	_msg := msg{Value: 1}
 	bMsg, _ := json.Marshal(_msg)
@@ -87,7 +86,7 @@ func Test_Server(t *testing.T) {
 		WithAck(false).
 		Build()
 
-	srv.save(__msg)
+	srv.save(__msg, FormatJSON)
 
 	time.Sleep(10 * time.Microsecond)
 	err = db.View(func(txn *badger.Txn) error {

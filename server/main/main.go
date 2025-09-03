@@ -15,7 +15,7 @@ const (
 func main() {
 	badgerPath := os.Getenv("BADGER_PATH")
 	if badgerPath == "" {
-		badgerPath = "/tmp/badger" //for local and NOT using docker, use tmp. Otherwise, go through Dockerfile env variable.
+		badgerPath = "/tmp/badger1" //for local and NOT using docker, use tmp. Otherwise, go through Dockerfile env variable.
 	}
 
 	s, err := server.NewServer(server.Config{

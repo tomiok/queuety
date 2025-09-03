@@ -26,19 +26,28 @@ func NewBadger(path string, inMemory bool) (*badger.DB, error) {
 
 // saveMessage will store the message at the first time, the id should start with false since is the
 // 1st time we are storing the message.
-func (b BadgerDB) saveMessage(message Message) error {
+func (b BadgerDB) saveMessage(message Message, format MessageFormat) error {
 	if !strings.HasPrefix(message.ID(), MsgPrefixFalse) {
 		return errors.New("invalid key, should start with 'false'")
 	}
 
 	return b.DB.Update(func(txn *badger.Txn) error {
 		message.IncAttempts() // store the messages with attempt 1.
-		msgBytes, err := message.Marshall()
+		var (
+			bytes []byte
+			err   error
+		)
+		if FormatJSON == format {
+			bytes, err = message.Marshall()
+		} else {
+			bytes, err = message.MarshalBinary()
+		}
+
 		if err != nil {
 			return err
 		}
 
-		err = txn.Set([]byte(message.ID()), msgBytes)
+		err = txn.Set([]byte(message.ID()), bytes)
 		if err != nil {
 			return err
 		}
