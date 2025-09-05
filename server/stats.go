@@ -29,6 +29,7 @@ type connections struct {
 func (s *Server) StartWebServer() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /stats", s.handleStats)
+	mux.HandleFunc("GET /metrics", s.handleMetrics)
 
 	s.webServer.Handler = mux
 	if err := s.webServer.ListenAndServe(); err != nil {
@@ -73,6 +74,22 @@ func (s *Server) handleStats(w http.ResponseWriter, _ *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	stats, err := s.getStoredMessages()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, "Failed to retrieve database metrics", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if err := json.NewEncoder(w).Encode(stats); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 }
 
 func (s *Server) incSentMessages(topic Topic) {
