@@ -126,18 +126,18 @@ func (s *Server) Close() error {
 	return s.listener.Close()
 }
 
-type StatsData struct {
-	Items []StatsItem `json:"items"`
+type StoredMessages struct {
+	Items []StoredItem `json:"items"`
 }
 
-type StatsItem struct {
+type StoredItem struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
 }
 
-func (s *Server) printStats() (*StatsData, error) {
-	stats := &StatsData{
-		Items: []StatsItem{},
+func (s *Server) getStoredMessages() (*StoredMessages, error) {
+	stats := &StoredMessages{
+		Items: []StoredItem{},
 	}
 
 	err := s.DB.View(func(txn *badger.Txn) error {
@@ -151,7 +151,7 @@ func (s *Server) printStats() (*StatsData, error) {
 			key := string(item.Key())
 
 			err := item.Value(func(v []byte) error {
-				stats.Items = append(stats.Items, StatsItem{
+				stats.Items = append(stats.Items, StoredItem{
 					Key:   key,
 					Value: string(v),
 				})

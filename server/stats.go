@@ -77,7 +77,7 @@ func (s *Server) handleStats(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
-	stats, err := s.printStats()
+	stats, err := s.getStoredMessages()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		http.Error(w, "Failed to retrieve database metrics", http.StatusInternalServerError)
