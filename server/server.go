@@ -126,34 +126,49 @@ func (s *Server) Close() error {
 	return s.listener.Close()
 }
 
-// unused by now.
-func (s *Server) printStats() {
-	ticker := time.NewTicker(5 * time.Second)
+type StatsData struct {
+	Items []StatsItem `json:"items"`
+}
 
-	for {
-		select {
-		case <-ticker.C:
-			err := s.DB.View(func(txn *badger.Txn) error {
-				opts := badger.DefaultIteratorOptions
-				opts.PrefetchSize = 10
-				it := txn.NewIterator(opts)
-				defer it.Close()
-				for it.Rewind(); it.Valid(); it.Next() {
-					item := it.Item()
-					err := item.Value(func(v []byte) error {
-						return nil
-					})
-					if err != nil {
-						return err
-					}
-				}
+type StatsItem struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+func (s *Server) printStats() (*StatsData, error) {
+	stats := &StatsData{
+		Items: []StatsItem{},
+	}
+
+	err := s.DB.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchSize = 10
+		it := txn.NewIterator(opts)
+		defer it.Close()
+
+		for it.Rewind(); it.Valid(); it.Next() {
+			item := it.Item()
+			key := string(item.Key())
+
+			err := item.Value(func(v []byte) error {
+				stats.Items = append(stats.Items, StatsItem{
+					Key:   key,
+					Value: string(v),
+				})
 				return nil
 			})
 			if err != nil {
-				log.Println(err)
+				return err
 			}
 		}
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
+
+	return stats, nil
 }
 
 func (s *Server) handleConnections(conn net.Conn) {
