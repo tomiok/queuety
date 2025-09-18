@@ -1,6 +1,6 @@
 module github.com/tomiok/queuety
 
-go 1.24
+go 1.24.0
 
 require (
 	github.com/dgraph-io/badger/v4 v4.8.0
@@ -21,5 +21,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
 	golang.org/x/net v0.41.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
+	golang.org/x/time v0.13.0 // indirect
 	google.golang.org/protobuf v1.36.6 // indirect
 )

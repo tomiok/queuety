@@ -37,6 +37,8 @@ type Server struct {
 
 	webServer    *http.Server
 	sentMessages map[Topic]*atomic.Int32
+
+	rateLimiter *RateLimiter
 }
 
 type Config struct {
@@ -48,6 +50,10 @@ type Config struct {
 	InMemoryData bool
 
 	WebServerPort string
+
+	RateLimitEnabled     bool
+	MaxMessagesPerSecond int
+	RateLimitQueueSize   int
 }
 
 type Auth struct {
@@ -80,6 +86,15 @@ func NewServer(c Config) (*Server, error) {
 		panic("invalid web server port")
 	}
 
+	var rateLimiter *RateLimiter
+	if c.RateLimitEnabled {
+		queueSize := c.RateLimitQueueSize
+		if queueSize == 0 {
+			queueSize = 1000
+		}
+		rateLimiter = NewRateLimiter(c.MaxMessagesPerSecond, queueSize)
+	}
+
 	return &Server{
 		protocol: c.Protocol,
 		port:     c.Port,
@@ -92,6 +107,7 @@ func NewServer(c Config) (*Server, error) {
 			Addr: c.WebServerPort,
 		},
 		sentMessages: make(map[Topic]*atomic.Int32),
+		rateLimiter:  rateLimiter,
 	}, nil
 }
 
@@ -110,6 +126,10 @@ func (s *Server) Start() error {
 		}
 	}()
 
+	if s.rateLimiter != nil {
+		go s.processRateLimitQueue()
+	}
+
 	for {
 		conn, errAccept := l.Accept()
 		if errAccept != nil {
@@ -123,6 +143,9 @@ func (s *Server) Start() error {
 }
 
 func (s *Server) Close() error {
+	if s.rateLimiter != nil {
+		s.rateLimiter.Stop()
+	}
 	return s.listener.Close()
 }
 
@@ -259,48 +282,8 @@ func (s *Server) sendNewMessage(message Message) {
 		return
 	}
 
-	// write for all the clients/connections
-	var payload []byte
-	var err error
-
-	for _, client := range clients {
-		if FormatJSON == client.Format {
-			payload, err = message.Marshall()
-		} else {
-			payload, err = message.MarshalBinary()
-		}
-
-		if err != nil {
-			log.Printf("cannot marshall message: %v\n", err)
-			return
-		}
-
-		err = binary.Write(client.conn, binary.LittleEndian, client.Format)
-		if err != nil {
-			log.Printf("cannot write format flag: %v\n", err)
-			return
-		}
-
-		length := uint32(len(payload))
-		err = binary.Write(client.conn, binary.LittleEndian, length)
-		if err != nil {
-			log.Printf("cannot write length: %v\n", err)
-			return
-		}
-
-		_, err = client.conn.Write(payload)
-		if err != nil {
-			log.Printf("cannot write payload: %v\n", err)
-			saveUnsentMessage(message, client.Format, s.save)
-			return
-		}
-
-		if message.attempts <= 1 {
-			s.save(message, client.Format)
-		}
-
-		s.incSentMessages(message.Topic())
-	}
+	format := clients[0].Format
+	s.sendMessageAsync(message, format, message.Topic())
 }
 func (s *Server) doLogin(conn net.Conn, message Message) {
 	if !s.needAuth() {
@@ -332,7 +315,6 @@ func (s *Server) doLogin(conn net.Conn, message Message) {
 		_ = conn.Close()
 	}
 	_, _ = conn.Write(b)
-	return
 }
 
 func (s *Server) validateAuth(msg Message) bool {
@@ -400,4 +382,78 @@ func (s *Server) disconnect(conn net.Conn) {
 func saveUnsentMessage(msg Message, format MessageFormat, saveFn func(Message, MessageFormat)) {
 	msg.IncAttempts()
 	saveFn(msg, format)
+}
+
+func (s *Server) sendMessageAsync(message Message, format MessageFormat, topic Topic) {
+	if s.rateLimiter == nil {
+		s.sendMessageSync(message, format, topic)
+		return
+	}
+
+	if s.rateLimiter.Allow() {
+		go s.sendMessageSync(message, format, topic)
+	} else {
+		if !s.rateLimiter.Queue(message) {
+			log.Printf("rate limit queue full, dropping message for topic %s", topic.Name)
+		}
+	}
+}
+
+func (s *Server) sendMessageSync(message Message, format MessageFormat, topic Topic) {
+	clients := s.clients[topic]
+	if len(clients) == 0 {
+		return
+	}
+
+	var payload []byte
+	var err error
+
+	if FormatJSON == format {
+		payload, err = message.Marshall()
+	} else {
+		payload, err = message.MarshalBinary()
+	}
+
+	if err != nil {
+		log.Printf("cannot marshall message: %v\n", err)
+		return
+	}
+
+	for _, client := range clients {
+		go s.sendToClient(client, message, payload)
+	}
+}
+
+func (s *Server) sendToClient(client Client, message Message, payload []byte) {
+	err := binary.Write(client.conn, binary.LittleEndian, client.Format)
+	if err != nil {
+		log.Printf("cannot write format flag: %v\n", err)
+		return
+	}
+
+	length := uint32(len(payload))
+	err = binary.Write(client.conn, binary.LittleEndian, length)
+	if err != nil {
+		log.Printf("cannot write length: %v\n", err)
+		return
+	}
+
+	_, err = client.conn.Write(payload)
+	if err != nil {
+		log.Printf("cannot write payload: %v\n", err)
+		saveUnsentMessage(message, client.Format, s.save)
+		return
+	}
+
+	if message.attempts <= 1 {
+		s.save(message, client.Format)
+	}
+
+	s.incSentMessages(message.Topic())
+}
+
+func (s *Server) processRateLimitQueue() {
+	s.rateLimiter.ProcessQueue(func(message Message) {
+		go s.sendMessageSync(message, FormatJSON, message.Topic())
+	})
 }
