@@ -27,7 +27,6 @@ func main() {
 		Duration:      3600 * time.Second,
 		Auth:          nil,
 
-		// Rate limiting configuration
 		RateLimitEnabled:     true,
 		MaxMessagesPerSecond: 10,
 		RateLimitQueueSize:   1000,
