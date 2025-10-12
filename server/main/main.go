@@ -1,10 +1,11 @@
 package main
 
 import (
-	"github.com/tomiok/queuety/server"
 	"log"
 	"os"
 	"time"
+
+	"github.com/tomiok/queuety/server"
 )
 
 const (
@@ -25,6 +26,10 @@ func main() {
 		BadgerPath:    badgerPath,
 		Duration:      3600 * time.Second,
 		Auth:          nil,
+
+		RateLimitEnabled:     true,
+		MaxMessagesPerSecond: 10,
+		RateLimitQueueSize:   1000,
 	})
 
 	if err != nil {
