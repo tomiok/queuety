@@ -169,37 +169,77 @@ func (q *QConn) PublishBinary(t server.Topic, msg []byte) error {
 // Both publish types has the ergonomics to send body as JSON and the string representation.
 // In this case, is just easier to reuse or replicate the JSON structure.
 func ConsumeJSON[T any](q *QConn, topic server.Topic) <-chan T {
+	return consumeJSONWithFraming[T](q, topic)
+}
+
+func consumeJSONWithFraming[T any](q *QConn, topic server.Topic) <-chan T {
 	if err := q.subscribe(topic); err != nil {
 		log.Printf("cannot sub %v\n", err)
 		return nil
 	}
 
 	ch := make(chan T, 1000)
+
 	go func() {
 		defer close(ch)
+
 		for {
-			b := make([]byte, 1024)
-			n, err := q.c.Read(b)
+			// read format flag (1 byte) -> maybe we need this in the future.
+			//formatBuff := make([]byte, 1)
+			//_, err := io.ReadFull(q.c, formatBuff)
+			//if err != nil {
+			//	if err == io.EOF {
+			//		log.Println("connection closed")
+			//		return
+			//	}
+			//	log.Printf("cannot read format flag: %v\n", err)
+			//	continue
+			//}
+
+			// read length (4 bytes little endian)
+			lengthBuff := make([]byte, 5)
+			_, err := io.ReadFull(q.c, lengthBuff)
 			if err != nil {
-				log.Printf("cannot read message %v \n", err)
+				log.Printf("cannot read message length: %v\n", err)
 				continue
 			}
 
-			if n > 0 {
-				msg, err := server.DecodeMessage(b[:n])
-				if err != nil {
-					log.Printf("cannot get message %v \n", err)
-					continue
-				}
+			// skip format flag (1 byte), read until 5th byte.
+			messageLength := binary.LittleEndian.Uint32(lengthBuff[1:5])
 
-				var t T
-				if err = json.Unmarshal(msg.Body(), &t); err != nil {
-					log.Printf("unable to unmarshal %v\n", err)
-				}
-
-				ch <- t
-				q.updateMessage(msg)
+			// safety check
+			if messageLength > 10*1024*1024 { // 10MB max
+				log.Printf("message too large: %d bytes, discarding\n", messageLength)
+				_, _ = io.CopyN(io.Discard, q.c, int64(messageLength))
+				continue
 			}
+
+			// read payload
+			payload := make([]byte, messageLength)
+			_, err = io.ReadFull(q.c, payload)
+			if err != nil {
+				log.Printf("cannot read payload: %v\n", err)
+				continue
+			}
+
+			// 5. Decodificar según formato
+			var msg server.Message
+
+			msg, err = server.DecodeMessage(payload)
+			if err != nil {
+				log.Printf("cannot decode JSON message: %v\n", err)
+				continue
+			}
+
+			// 6. Unmarshal body
+			var t T
+			if err = json.Unmarshal(msg.Body(), &t); err != nil {
+				log.Printf("unable to unmarshal body: %v\n", err)
+				continue
+			}
+
+			ch <- t
+			q.updateMessage(msg)
 		}
 	}()
 
