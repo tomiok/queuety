@@ -298,7 +298,7 @@ func Consume(q *QConn, topic server.Topic) <-chan string {
 
 			// Unmarshal binary message
 			msg := server.Message{}
-			err = msg.UnmarshalBinary(payload)
+			err = server.UnmarshalBinary(payload, &msg)
 			if err != nil {
 				log.Printf("cannot unmarshal binary message %v \n", err)
 				continue

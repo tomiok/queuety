@@ -54,28 +54,16 @@ type Message struct {
 	Attempts   int
 }
 
-func (m *Message) IncAttempts() {
+func (m Message) IncAttempts() Message {
 	m.Attempts++
+	return m
 }
 
-func (m *Message) updateACK() {
+func (m Message) updateACK() Message {
 	m.ID = m.NextID
 	m.ACK = true
-}
 
-func (m *Message) updateAuthSuccess() {
-	m.MType = MessageAuthSuccess
-}
-
-func (m *Message) updateAuthFailed() {
-	m.MType = MessageAuthFailed
-}
-
-func NewMessage(pubMsg PublishMessage) Message {
-	return NewMessageBuilder().
-		WithTopic(pubMsg.Topic).
-		WithBody(pubMsg.Body).
-		Build()
+	return m
 }
 
 // MessageBuilder builder pattern
@@ -93,67 +81,21 @@ func NewMessageBuilder() *MessageBuilder {
 	}
 }
 
-func (m *Message) Marshall() ([]byte, error) {
-	mJSON := Message{
-		ID:         m.ID,
-		NextID:     m.NextID,
-		MType:      m.MType,
-		User:       m.User,
-		Password:   m.Password,
-		Topic:      m.Topic,
-		Body:       m.Body,
-		BodyString: m.BodyString,
-		Timestamp:  m.Timestamp,
-		ACK:        m.ACK,
-		Attempts:   m.Attempts,
-	}
-
-	return json.Marshal(mJSON)
-}
-
-func (m *Message) Unmarshal(data []byte) error {
-	var mJSON Message
-	if err := json.Unmarshal(data, &mJSON); err != nil {
-		return err
-	}
-
-	m.ID = mJSON.ID
-	m.NextID = mJSON.NextID
-	m.MType = mJSON.MType
-	m.User = mJSON.User
-	m.Password = mJSON.Password
-	m.Topic = mJSON.Topic
-	m.Body = mJSON.Body
-	m.BodyString = mJSON.BodyString
-	m.Timestamp = mJSON.Timestamp
-	m.ACK = mJSON.ACK
-	m.Attempts = mJSON.Attempts
-	return nil
+func (m Message) Marshall() ([]byte, error) {
+	return json.Marshal(m)
 }
 
 func DecodeMessage(b []byte) (Message, error) {
 	r := bytes.NewReader(b)
-	var mJSON Message
-	if err := json.NewDecoder(r).Decode(&mJSON); err != nil {
+	var msg Message
+	if err := json.NewDecoder(r).Decode(&msg); err != nil {
 		return Message{}, err
 	}
 
-	return Message{
-		ID:         mJSON.ID,
-		NextID:     mJSON.NextID,
-		MType:      mJSON.MType,
-		User:       mJSON.User,
-		Password:   mJSON.Password,
-		Topic:      mJSON.Topic,
-		Body:       mJSON.Body,
-		BodyString: mJSON.BodyString,
-		Timestamp:  mJSON.Timestamp,
-		ACK:        mJSON.ACK,
-		Attempts:   mJSON.Attempts,
-	}, nil
+	return msg, nil
 }
 
-func (m *Message) String() string {
+func (m Message) String() string {
 	return fmt.Sprintf("Message %s, %s, %s at %d", m.MType, m.Topic, m.Body, m.Timestamp)
 }
 
@@ -213,7 +155,7 @@ func (mb *MessageBuilder) Build() Message {
 }
 
 // MarshalBinary serializes Message to binary format
-func (m *Message) MarshalBinary() ([]byte, error) {
+func (m Message) MarshalBinary() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// Write ID length + ID
@@ -304,7 +246,7 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 }
 
 // UnmarshalBinary deserializes binary data into Message
-func (m *Message) UnmarshalBinary(data []byte) error {
+func UnmarshalBinary(data []byte, m *Message) error {
 	buf := bytes.NewReader(data)
 
 	// Read ID

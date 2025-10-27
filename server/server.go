@@ -249,7 +249,7 @@ func (s *Server) handleMessage(conn net.Conn, buff []byte, format MessageFormat)
 		fmt.Printf("decoded JSON message %s\n", msg.Body)
 
 	case FormatBinary:
-		err = msg.UnmarshalBinary(buff)
+		err = UnmarshalBinary(buff, &msg)
 		if err != nil {
 			log.Printf("cannot parse binary message %v \n", err)
 			return
@@ -283,11 +283,11 @@ func (s *Server) sendNewMessage(message Message) {
 	}
 
 	format := clients[0].Format
-	s.sendMessageAsync(message, format, message.Topic)
+	s.sendMessage(message, format, message.Topic)
 }
 func (s *Server) doLogin(conn net.Conn, message Message) {
 	if !s.needAuth() {
-		message.updateAuthSuccess() // no auth need means successful.
+		message.MType = MessageAuthSuccess // no auth need means successful.
 		b, err := message.Marshall()
 		if err != nil {
 			// just close the connection.
@@ -298,7 +298,7 @@ func (s *Server) doLogin(conn net.Conn, message Message) {
 	}
 
 	if !s.validateAuth(message) {
-		message.updateAuthFailed()
+		message.MType = MessageAuthFailed
 		b, err := message.Marshall()
 		if err != nil {
 			// just close the connection.
@@ -308,7 +308,7 @@ func (s *Server) doLogin(conn net.Conn, message Message) {
 		return
 	}
 
-	message.updateAuthSuccess()
+	message.MType = MessageAuthSuccess
 	b, err := message.Marshall()
 	if err != nil {
 		// just close the connection.
@@ -384,7 +384,7 @@ func saveUnsentMessage(msg Message, format MessageFormat, saveFn func(Message, M
 	saveFn(msg, format)
 }
 
-func (s *Server) sendMessageAsync(message Message, format MessageFormat, topic Topic) {
+func (s *Server) sendMessage(message Message, format MessageFormat, topic Topic) {
 	if s.rateLimiter == nil {
 		s.sendMessageSync(message, format, topic)
 		return
@@ -392,11 +392,13 @@ func (s *Server) sendMessageAsync(message Message, format MessageFormat, topic T
 
 	if s.rateLimiter.Allow() {
 		go s.sendMessageSync(message, format, topic)
-	} else {
-		if !s.rateLimiter.Queue(message) {
-			log.Printf("rate limit queue full, dropping message for Topic %s", topic.Name)
-		}
+		return
 	}
+
+	if !s.rateLimiter.Queue(message) {
+		log.Printf("rate limit queue full, dropping message for Topic %s", topic.Name)
+	}
+
 }
 
 func (s *Server) sendMessageSync(message Message, format MessageFormat, topic Topic) {
