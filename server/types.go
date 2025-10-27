@@ -36,97 +36,39 @@ func (t Topic) IsEmpty() bool {
 }
 
 type PublishMessage struct {
-	Topic Topic           `json:"topic"`
-	Body  json.RawMessage `json:"body"`
+	Topic Topic           `json:"Topic"`
+	Body  json.RawMessage `json:"Body"`
 }
 
 type Message struct {
-	id         string
-	nextID     string
-	mType      MType
-	user       string
-	password   string
-	topic      Topic
-	body       json.RawMessage
-	bodyString string
-	timestamp  int64
-	ack        bool
-	attempts   int
-}
-
-type messageJSON struct {
-	ID         string          `json:"id"`
-	NextID     string          `json:"next_id"`
-	Type       MType           `json:"type"`
-	User       string          `json:"user"`
-	Password   string          `json:"password"`
-	Topic      Topic           `json:"topic"`
-	Body       json.RawMessage `json:"body"`
-	BodyString string          `json:"body_string"`
-	Timestamp  int64           `json:"timestamp"`
-	ACK        bool            `json:"ack"`
-	Attempts   int             `json:"attempts"`
-}
-
-func (m *Message) ID() string {
-	return m.id
-}
-
-func (m *Message) NextID() string {
-	return m.nextID
-}
-
-func (m *Message) Type() MType {
-	return m.mType
-}
-
-func (m *Message) User() string {
-	return m.user
-}
-
-func (m *Message) Password() string {
-	return m.password
-}
-
-func (m *Message) Topic() Topic {
-	return m.topic
-}
-
-func (m *Message) Body() json.RawMessage {
-	return m.body
-}
-
-func (m *Message) BodyString() string {
-	return m.bodyString
-}
-
-func (m *Message) Timestamp() int64 {
-	return m.timestamp
-}
-
-func (m *Message) ACK() bool {
-	return m.ack
-}
-
-func (m *Message) Attempts() int {
-	return m.attempts
+	ID         string
+	NextID     string
+	MType      MType
+	User       string
+	Password   string
+	Topic      Topic
+	Body       json.RawMessage
+	BodyString string
+	Timestamp  int64
+	ACK        bool
+	Attempts   int
 }
 
 func (m *Message) IncAttempts() {
-	m.attempts++
+	m.Attempts++
 }
 
 func (m *Message) updateACK() {
-	m.id = m.nextID
-	m.ack = true
+	m.ID = m.NextID
+	m.ACK = true
 }
 
 func (m *Message) updateAuthSuccess() {
-	m.mType = MessageAuthSuccess
+	m.MType = MessageAuthSuccess
 }
 
 func (m *Message) updateAuthFailed() {
-	m.mType = MessageAuthFailed
+	m.MType = MessageAuthFailed
 }
 
 func NewMessage(pubMsg PublishMessage) Message {
@@ -144,125 +86,125 @@ type MessageBuilder struct {
 func NewMessageBuilder() *MessageBuilder {
 	return &MessageBuilder{
 		msg: Message{
-			timestamp: time.Now().Unix(),
-			attempts:  0,
-			ack:       false,
+			Timestamp: time.Now().Unix(),
+			Attempts:  0,
+			ACK:       false,
 		},
 	}
 }
 
 func (m *Message) Marshall() ([]byte, error) {
-	mJSON := messageJSON{
-		ID:         m.id,
-		NextID:     m.nextID,
-		Type:       m.mType,
-		User:       m.user,
-		Password:   m.password,
-		Topic:      m.topic,
-		Body:       m.body,
-		BodyString: m.bodyString,
-		Timestamp:  m.timestamp,
-		ACK:        m.ack,
-		Attempts:   m.attempts,
+	mJSON := Message{
+		ID:         m.ID,
+		NextID:     m.NextID,
+		MType:      m.MType,
+		User:       m.User,
+		Password:   m.Password,
+		Topic:      m.Topic,
+		Body:       m.Body,
+		BodyString: m.BodyString,
+		Timestamp:  m.Timestamp,
+		ACK:        m.ACK,
+		Attempts:   m.Attempts,
 	}
 
 	return json.Marshal(mJSON)
 }
 
 func (m *Message) Unmarshal(data []byte) error {
-	var mJSON messageJSON
+	var mJSON Message
 	if err := json.Unmarshal(data, &mJSON); err != nil {
 		return err
 	}
 
-	m.id = mJSON.ID
-	m.nextID = mJSON.NextID
-	m.mType = mJSON.Type
-	m.user = mJSON.User
-	m.password = mJSON.Password
-	m.topic = mJSON.Topic
-	m.body = mJSON.Body
-	m.bodyString = mJSON.BodyString
-	m.timestamp = mJSON.Timestamp
-	m.ack = mJSON.ACK
-	m.attempts = mJSON.Attempts
+	m.ID = mJSON.ID
+	m.NextID = mJSON.NextID
+	m.MType = mJSON.MType
+	m.User = mJSON.User
+	m.Password = mJSON.Password
+	m.Topic = mJSON.Topic
+	m.Body = mJSON.Body
+	m.BodyString = mJSON.BodyString
+	m.Timestamp = mJSON.Timestamp
+	m.ACK = mJSON.ACK
+	m.Attempts = mJSON.Attempts
 	return nil
 }
 
 func DecodeMessage(b []byte) (Message, error) {
 	r := bytes.NewReader(b)
-	var mJSON messageJSON
+	var mJSON Message
 	if err := json.NewDecoder(r).Decode(&mJSON); err != nil {
 		return Message{}, err
 	}
-	
+
 	return Message{
-		id:         mJSON.ID,
-		nextID:     mJSON.NextID,
-		mType:      mJSON.Type,
-		user:       mJSON.User,
-		password:   mJSON.Password,
-		topic:      mJSON.Topic,
-		body:       mJSON.Body,
-		bodyString: mJSON.BodyString,
-		timestamp:  mJSON.Timestamp,
-		ack:        mJSON.ACK,
-		attempts:   mJSON.Attempts,
+		ID:         mJSON.ID,
+		NextID:     mJSON.NextID,
+		MType:      mJSON.MType,
+		User:       mJSON.User,
+		Password:   mJSON.Password,
+		Topic:      mJSON.Topic,
+		Body:       mJSON.Body,
+		BodyString: mJSON.BodyString,
+		Timestamp:  mJSON.Timestamp,
+		ACK:        mJSON.ACK,
+		Attempts:   mJSON.Attempts,
 	}, nil
 }
 
 func (m *Message) String() string {
-	return fmt.Sprintf("Message %s, %s, %s at %d", m.mType, m.topic, m.body, m.timestamp)
+	return fmt.Sprintf("Message %s, %s, %s at %d", m.MType, m.Topic, m.Body, m.Timestamp)
 }
 
 func (mb *MessageBuilder) WithTopic(topic Topic) *MessageBuilder {
-	mb.msg.topic = topic
+	mb.msg.Topic = topic
 	return mb
 }
 
 func (mb *MessageBuilder) WithBody(body json.RawMessage) *MessageBuilder {
-	mb.msg.body = body
-	mb.msg.bodyString = string(body)
+	mb.msg.Body = body
+	mb.msg.BodyString = string(body)
 	return mb
 }
 
 func (mb *MessageBuilder) WithID(ID string) *MessageBuilder {
-	mb.msg.id = ID
+	mb.msg.ID = ID
 	return mb
 }
 
 func (mb *MessageBuilder) WithNextID(nextID string) *MessageBuilder {
-	mb.msg.nextID = nextID
+	mb.msg.NextID = nextID
 	return mb
 }
 
 func (mb *MessageBuilder) WithType(mtype MType) *MessageBuilder {
-	mb.msg.mType = mtype
+	mb.msg.MType = mtype
 	return mb
 }
 
 func (mb *MessageBuilder) WithUser(user string) *MessageBuilder {
-	mb.msg.user = user
+	mb.msg.User = user
 	return mb
 }
 
 func (mb *MessageBuilder) WithPassword(password string) *MessageBuilder {
-	mb.msg.password = password
+	mb.msg.Password = password
 	return mb
 }
 
 func (mb *MessageBuilder) WithAck(ack bool) *MessageBuilder {
-	mb.msg.ack = ack
+	mb.msg.ACK = ack
 	return mb
 }
 
 func (mb *MessageBuilder) WithAttempts(attempts int) *MessageBuilder {
-	mb.msg.attempts = attempts
+	mb.msg.Attempts = attempts
 	return mb
 }
 
 func (mb *MessageBuilder) WithTimestamp(ts int64) *MessageBuilder {
-	mb.msg.timestamp = ts
+	mb.msg.Timestamp = ts
 	return mb
 }
 
@@ -275,7 +217,7 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 	buf := new(bytes.Buffer)
 
 	// Write ID length + ID
-	idBytes := []byte(m.id)
+	idBytes := []byte(m.ID)
 	if err := binary.Write(buf, binary.LittleEndian, uint16(len(idBytes))); err != nil {
 		return nil, err
 	}
@@ -283,7 +225,7 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 	buf.Write(idBytes)
 
 	// Write NextID length + NextID
-	nextIDBytes := []byte(m.nextID)
+	nextIDBytes := []byte(m.NextID)
 	if err := binary.Write(buf, binary.LittleEndian, uint16(len(nextIDBytes))); err != nil {
 		return nil, err
 	}
@@ -291,7 +233,7 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 	buf.Write(nextIDBytes)
 
 	// Write Type length + Type
-	typeBytes := []byte(m.mType)
+	typeBytes := []byte(m.MType)
 	if err := binary.Write(buf, binary.LittleEndian, uint16(len(typeBytes))); err != nil {
 		return nil, err
 	}
@@ -299,7 +241,7 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 	buf.Write(typeBytes)
 
 	// Write User length + User
-	userBytes := []byte(m.user)
+	userBytes := []byte(m.User)
 	if err := binary.Write(buf, binary.LittleEndian, uint16(len(userBytes))); err != nil {
 		return nil, err
 	}
@@ -307,7 +249,7 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 	buf.Write(userBytes)
 
 	// Write Password length + Password
-	passwordBytes := []byte(m.password)
+	passwordBytes := []byte(m.Password)
 	if err := binary.Write(buf, binary.LittleEndian, uint16(len(passwordBytes))); err != nil {
 		return nil, err
 	}
@@ -315,7 +257,7 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 	buf.Write(passwordBytes)
 
 	// Write Topic name length + Topic name
-	topicBytes := []byte(m.topic.Name)
+	topicBytes := []byte(m.Topic.Name)
 	if err := binary.Write(buf, binary.LittleEndian, uint16(len(topicBytes))); err != nil {
 		return nil, err
 	}
@@ -323,7 +265,7 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 	buf.Write(topicBytes)
 
 	// Write Body length + Body
-	bodyBytes := []byte(m.body)
+	bodyBytes := []byte(m.Body)
 	if err := binary.Write(buf, binary.LittleEndian, uint32(len(bodyBytes))); err != nil {
 		return nil, err
 	}
@@ -331,7 +273,7 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 	buf.Write(bodyBytes)
 
 	// Write BodyString length + BodyString
-	bodyStringBytes := []byte(m.bodyString)
+	bodyStringBytes := []byte(m.BodyString)
 	if err := binary.Write(buf, binary.LittleEndian, uint32(len(bodyStringBytes))); err != nil {
 		return nil, err
 	}
@@ -339,13 +281,13 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 	buf.Write(bodyStringBytes)
 
 	// Write Timestamp (8 bytes)
-	if err := binary.Write(buf, binary.LittleEndian, m.timestamp); err != nil {
+	if err := binary.Write(buf, binary.LittleEndian, m.Timestamp); err != nil {
 		return nil, err
 	}
 
 	// Write ACK (1 byte)
 	ackByte := byte(0)
-	if m.ack {
+	if m.ACK {
 		ackByte = 1
 	}
 
@@ -354,7 +296,7 @@ func (m *Message) MarshalBinary() ([]byte, error) {
 	}
 
 	// Write Attempts (4 bytes)
-	if err := binary.Write(buf, binary.LittleEndian, int32(m.attempts)); err != nil {
+	if err := binary.Write(buf, binary.LittleEndian, int32(m.Attempts)); err != nil {
 		return nil, err
 	}
 
@@ -374,7 +316,7 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 	if _, err := io.ReadFull(buf, idBytes); err != nil {
 		return err
 	}
-	m.id = string(idBytes)
+	m.ID = string(idBytes)
 
 	// Read NextID
 	var nextIDLen uint16
@@ -385,7 +327,7 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 	if _, err := io.ReadFull(buf, nextIDBytes); err != nil {
 		return err
 	}
-	m.nextID = string(nextIDBytes)
+	m.NextID = string(nextIDBytes)
 
 	// Read Format
 	var typeLen uint16
@@ -396,7 +338,7 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 	if _, err := io.ReadFull(buf, typeBytes); err != nil {
 		return err
 	}
-	m.mType = MType(typeBytes)
+	m.MType = MType(typeBytes)
 
 	// Read User
 	var userLen uint16
@@ -407,7 +349,7 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 	if _, err := io.ReadFull(buf, userBytes); err != nil {
 		return err
 	}
-	m.user = string(userBytes)
+	m.User = string(userBytes)
 
 	// Read Password
 	var passwordLen uint16
@@ -418,7 +360,7 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 	if _, err := io.ReadFull(buf, passwordBytes); err != nil {
 		return err
 	}
-	m.password = string(passwordBytes)
+	m.Password = string(passwordBytes)
 
 	// Read Topic
 	var topicLen uint16
@@ -429,7 +371,7 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 	if _, err := io.ReadFull(buf, topicBytes); err != nil {
 		return err
 	}
-	m.topic = Topic{Name: string(topicBytes)}
+	m.Topic = Topic{Name: string(topicBytes)}
 
 	// Read Body
 	var bodyLen uint32
@@ -440,7 +382,7 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 	if _, err := io.ReadFull(buf, bodyBytes); err != nil {
 		return err
 	}
-	m.body = json.RawMessage(bodyBytes)
+	m.Body = json.RawMessage(bodyBytes)
 
 	// Read BodyString
 	var bodyStringLen uint32
@@ -451,10 +393,10 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 	if _, err := io.ReadFull(buf, bodyStringBytes); err != nil {
 		return err
 	}
-	m.bodyString = string(bodyStringBytes)
+	m.BodyString = string(bodyStringBytes)
 
 	// Read Timestamp
-	if err := binary.Read(buf, binary.LittleEndian, &m.timestamp); err != nil {
+	if err := binary.Read(buf, binary.LittleEndian, &m.Timestamp); err != nil {
 		return err
 	}
 
@@ -463,14 +405,14 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 	if err := binary.Read(buf, binary.LittleEndian, &ackByte); err != nil {
 		return err
 	}
-	m.ack = ackByte == 1
+	m.ACK = ackByte == 1
 
 	// Read Attempts
 	var attempts int32
 	if err := binary.Read(buf, binary.LittleEndian, &attempts); err != nil {
 		return err
 	}
-	m.attempts = int(attempts)
+	m.Attempts = int(attempts)
 
 	return nil
 }

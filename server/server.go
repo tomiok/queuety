@@ -226,7 +226,7 @@ func (s *Server) handleConnections(conn net.Conn) {
 		messageBuff := make([]byte, messageLength)
 		_, err = io.ReadFull(conn, messageBuff)
 		if err != nil {
-			log.Printf("cannot read message body %v \n", err)
+			log.Printf("cannot read message Body %v \n", err)
 			continue
 		}
 
@@ -246,7 +246,7 @@ func (s *Server) handleMessage(conn net.Conn, buff []byte, format MessageFormat)
 			log.Printf("cannot parse JSON message %v \n", err)
 			return
 		}
-		fmt.Printf("decoded JSON message %s\n", msg.body)
+		fmt.Printf("decoded JSON message %s\n", msg.Body)
 
 	case FormatBinary:
 		err = msg.UnmarshalBinary(buff)
@@ -261,13 +261,13 @@ func (s *Server) handleMessage(conn net.Conn, buff []byte, format MessageFormat)
 	}
 
 	// same message handling logic for both formats
-	switch msg.Type() {
+	switch msg.MType {
 	case MessageTypeNewTopic:
-		s.addNewTopic(msg.Topic().Name)
+		s.addNewTopic(msg.Topic.Name)
 	case MessageTypeNew:
 		s.sendNewMessage(msg)
 	case MessageTypeNewSubscriber:
-		s.addNewSubscriber(conn, msg.Topic(), format)
+		s.addNewSubscriber(conn, msg.Topic, format)
 	case MessageTypeACK:
 		s.ack(msg)
 	case MessageTypeAuth:
@@ -276,14 +276,14 @@ func (s *Server) handleMessage(conn net.Conn, buff []byte, format MessageFormat)
 }
 
 func (s *Server) sendNewMessage(message Message) {
-	clients := s.clients[message.Topic()]
+	clients := s.clients[message.Topic]
 	if len(clients) == 0 {
-		log.Printf("topic not found, actual name: %s, values in memory: %v \n", message.Topic().Name, s.clients)
+		log.Printf("Topic not found, actual name: %s, values in memory: %v \n", message.Topic.Name, s.clients)
 		return
 	}
 
 	format := clients[0].Format
-	s.sendMessageAsync(message, format, message.Topic())
+	s.sendMessageAsync(message, format, message.Topic)
 }
 func (s *Server) doLogin(conn net.Conn, message Message) {
 	if !s.needAuth() {
@@ -318,10 +318,10 @@ func (s *Server) doLogin(conn net.Conn, message Message) {
 }
 
 func (s *Server) validateAuth(msg Message) bool {
-	return s.User == msg.User() && s.Password == msg.Password()
+	return s.User == msg.User && s.Password == msg.Password
 }
 
-// you need to set up user and password in order to secure the server.
+// you need to set up User and Password in order to secure the server.
 func (s *Server) needAuth() bool {
 	if s.User != "" {
 		return true
@@ -336,7 +336,7 @@ func (s *Server) needAuth() bool {
 
 func (s *Server) save(message Message, format MessageFormat) {
 	if err := s.DB.saveMessage(message, format); err != nil {
-		log.Printf("cannot save message with id %s, %v\n", message.ID(), err)
+		log.Printf("cannot save message with ID %s, %v\n", message.ID, err)
 	}
 }
 
@@ -353,7 +353,7 @@ func (s *Server) addNewTopic(name string) {
 
 func (s *Server) ack(message Message) {
 	if err := s.DB.updateMessageACK(message); err != nil {
-		log.Printf("cannot ACK message with id %s, %v", message.ID(), err)
+		log.Printf("cannot ACK message with ID %s, %v", message.ID, err)
 	}
 }
 
@@ -362,7 +362,7 @@ func (s *Server) disconnect(conn net.Conn) {
 		for i, client := range clients {
 			if client.conn == conn {
 				s.clients[topic] = append(clients[:i], clients[i+1:]...)
-				log.Printf("client removed in topic: %s", topic.Name)
+				log.Printf("client removed in Topic: %s", topic.Name)
 				break
 			}
 		}
@@ -394,7 +394,7 @@ func (s *Server) sendMessageAsync(message Message, format MessageFormat, topic T
 		go s.sendMessageSync(message, format, topic)
 	} else {
 		if !s.rateLimiter.Queue(message) {
-			log.Printf("rate limit queue full, dropping message for topic %s", topic.Name)
+			log.Printf("rate limit queue full, dropping message for Topic %s", topic.Name)
 		}
 	}
 }
@@ -445,15 +445,15 @@ func (s *Server) sendToClient(client Client, message Message, payload []byte) {
 		return
 	}
 
-	if message.attempts <= 1 {
+	if message.Attempts <= 1 {
 		s.save(message, client.Format)
 	}
 
-	s.incSentMessages(message.Topic())
+	s.incSentMessages(message.Topic)
 }
 
 func (s *Server) processRateLimitQueue() {
 	s.rateLimiter.ProcessQueue(func(message Message) {
-		go s.sendMessageSync(message, FormatJSON, message.Topic())
+		go s.sendMessageSync(message, FormatJSON, message.Topic)
 	})
 }

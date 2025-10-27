@@ -68,7 +68,7 @@ func Connect(protocol, addr string, auth *Auth) (*QConn, error) {
 			return nil, err
 		}
 
-		if msgResponse.Type() == server.MessageAuthFailed {
+		if msgResponse.MType == server.MessageAuthFailed {
 			return nil, errors.New("authentication failed")
 		}
 
@@ -233,7 +233,7 @@ func consumeJSONWithFraming[T any](q *QConn, topic server.Topic) <-chan T {
 
 			// 6. Unmarshal body
 			var t T
-			if err = json.Unmarshal(msg.Body(), &t); err != nil {
+			if err = json.Unmarshal(msg.Body, &t); err != nil {
 				log.Printf("unable to unmarshal body: %v\n", err)
 				continue
 			}
@@ -279,11 +279,10 @@ func Consume(q *QConn, topic server.Topic) <-chan string {
 				continue
 			}
 			messageLength := binary.LittleEndian.Uint32(lengthBuff)
-			fmt.Printf("DEBUG: Message length = %d\n", messageLength)
 
 			// SAFETY CHECK - prevent huge allocations
 			if messageLength > 10*1024*1024 { // 10MB max
-				log.Printf("Message length too large: %d bytes, skipping\n", messageLength)
+				log.Printf("[ERROR] message length too large: %d bytes, skipping\n", messageLength)
 				continue
 			}
 
@@ -291,13 +290,11 @@ func Consume(q *QConn, topic server.Topic) <-chan string {
 
 			// Read payload
 			payload := make([]byte, messageLength)
-			fmt.Printf("DEBUG: About to read payload of %d bytes\n", messageLength)
 			_, err = io.ReadFull(q.c, payload)
 			if err != nil {
 				log.Printf("cannot read message payload %v \n", err)
 				continue
 			}
-			fmt.Printf("DEBUG: Successfully read payload\n")
 
 			// Unmarshal binary message
 			msg := server.Message{}
@@ -307,8 +304,7 @@ func Consume(q *QConn, topic server.Topic) <-chan string {
 				continue
 			}
 
-			fmt.Printf("DEBUG: Unmarshaled message: %+v\n", msg)
-			ch <- msg.BodyString()
+			ch <- msg.BodyString
 			q.updateMessage(msg)
 		}
 	}()
@@ -336,20 +332,20 @@ func (q *QConn) unsubscribe() error {
 
 func (q *QConn) updateMessage(msg server.Message) {
 	m := server.NewMessageBuilder().
-		WithID(msg.ID()).
-		WithNextID(msg.NextID()).
-		WithUser(msg.User()).
-		WithPassword(msg.Password()).
-		WithTopic(msg.Topic()).
-		WithBody(msg.Body()).
-		WithTimestamp(msg.Timestamp()).
-		WithAttempts(msg.Attempts()).
+		WithID(msg.ID).
+		WithNextID(msg.NextID).
+		WithUser(msg.User).
+		WithPassword(msg.Password).
+		WithTopic(msg.Topic).
+		WithBody(msg.Body).
+		WithTimestamp(msg.Timestamp).
+		WithAttempts(msg.Attempts).
 		WithType(server.MessageTypeACK).
 		WithAck(true).
 		Build()
 
 	if err := q.writeMessage(m); err != nil {
-		log.Printf("cannot send ACK confirmation, message id %s \n", msg.ID())
+		log.Printf("cannot send ACK confirmation, message id %s \n", msg.ID)
 	}
 }
 

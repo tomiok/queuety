@@ -66,8 +66,8 @@ func Test_Server(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	conn, err := net.Dial("tcp", ":60123")
-	topic := NewTopic("test-topic")
-	srv.addNewTopic("test-topic")
+	topic := NewTopic("test-Topic")
+	srv.addNewTopic("test-Topic")
 	srv.addNewSubscriber(conn, topic, FormatJSON)
 
 	_msg := msg{Value: 1}

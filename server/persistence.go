@@ -24,10 +24,10 @@ func NewBadger(path string, inMemory bool) (*badger.DB, error) {
 	return badger.Open(badger.DefaultOptions(path))
 }
 
-// saveMessage will store the message at the first time, the id should start with false since is the
+// saveMessage will store the message at the first time, the ID should start with false since is the
 // 1st time we are storing the message.
 func (b BadgerDB) saveMessage(message Message, format MessageFormat) error {
-	if !strings.HasPrefix(message.ID(), MsgPrefixFalse) {
+	if !strings.HasPrefix(message.ID, MsgPrefixFalse) {
 		return errors.New("invalid key, should start with 'false'")
 	}
 
@@ -47,7 +47,7 @@ func (b BadgerDB) saveMessage(message Message, format MessageFormat) error {
 			return err
 		}
 
-		err = txn.Set([]byte(message.ID()), bytes)
+		err = txn.Set([]byte(message.ID), bytes)
 		if err != nil {
 			return err
 		}
@@ -60,8 +60,8 @@ func (b BadgerDB) updateMessageACK(message Message) error {
 	return b.DB.Update(func(txn *badger.Txn) error {
 		// delete entry with old key.
 		fmt.Println("deleting message")
-		if err := txn.Delete([]byte(message.ID())); err != nil {
-			log.Printf("cannot delete message with ID %s", message.ID())
+		if err := txn.Delete([]byte(message.ID)); err != nil {
+			log.Printf("cannot delete message with ID %s", message.ID)
 		}
 
 		message.updateACK()
@@ -70,7 +70,7 @@ func (b BadgerDB) updateMessageACK(message Message) error {
 			return err
 		}
 
-		err = txn.Set([]byte(message.ID()), msgBytes)
+		err = txn.Set([]byte(message.ID), msgBytes)
 		if err != nil {
 			return err
 		}
@@ -78,6 +78,8 @@ func (b BadgerDB) updateMessageACK(message Message) error {
 		return nil
 	})
 }
+
+const maxAttempts = 3
 
 func (b BadgerDB) checkNotDeliveredMessages() ([]Message, error) {
 	var messages []Message
@@ -95,7 +97,7 @@ func (b BadgerDB) checkNotDeliveredMessages() ([]Message, error) {
 				}
 
 				msg.IncAttempts()
-				if msg.Attempts() <= 3 {
+				if msg.Attempts <= maxAttempts {
 					messages = append(messages, msg)
 				}
 
@@ -103,7 +105,7 @@ func (b BadgerDB) checkNotDeliveredMessages() ([]Message, error) {
 			})
 
 			if err != nil {
-				log.Printf("cannot get message with id %s, %v\n", k, err)
+				log.Printf("cannot get message with ID %s, %v\n", k, err)
 				continue
 			}
 		}
