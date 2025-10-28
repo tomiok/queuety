@@ -43,13 +43,11 @@ func Connect(protocol, addr string, auth *Auth) (*QConn, error) {
 	}
 
 	if auth != nil {
-		msg := server.NewMessageBuilder().
-			WithID(generateNextID()).
-			WithType(server.MessageTypeAuth).
-			WithUser(auth.User).
-			WithPassword(auth.Pass).
-			WithTimestamp(time.Now().Unix()).
-			Build()
+		msg := newMessage(server.MessageTypeAuth, server.Topic{}, nil, &MessageOptions{
+			User:     auth.User,
+			Password: auth.Pass,
+		})
+		msg.ID = generateNextID()
 
 		err = qConn.writeMessageWithFormat(msg, FormatJSON)
 		if err != nil {
@@ -83,86 +81,51 @@ func (q *QConn) SetDefaultFormat(format MessageFormat) {
 }
 
 func (q *QConn) NewTopic(name string) (server.Topic, error) {
-	m := server.NewMessageBuilder().
-		WithID(uuid.NewString()).
-		WithType(server.MessageTypeNewTopic).
-		WithTopic(server.NewTopic(name)).
-		WithTimestamp(time.Now().Unix()).
-		WithAck(false).
-		Build()
+	topic := server.NewTopic(name)
+	msg := newSimpleMessage(server.MessageTypeNewTopic, topic)
 
-	err := q.qWrite(m)
+	err := q.qWrite(msg)
 	if err != nil {
 		return server.Topic{}, err
 	}
 
-	return server.Topic{
-		Name: name,
-	}, nil
+	return topic, nil
 }
 
 func (q *QConn) PublishMessage(pubMsg server.PublishMessage) error {
-	nextID := generateNextID()
-
-	m := server.NewMessageBuilder().
-		WithID(generateID(server.MsgPrefixFalse, nextID)).
-		WithNextID(nextID).
-		WithType(server.MessageTypeNew).
-		WithTopic(pubMsg.Topic).
-		WithBody(pubMsg.Body).
-		WithTimestamp(time.Now().Unix()).
-		WithAck(false).
-		Build()
-
-	return q.qWrite(m)
+	return q.PublishMessageWithTTL(pubMsg, 0)
 }
 
-func (q *QConn) Publish(t server.Topic, msg string) error {
-	nextID := generateNextID()
-
-	m := server.NewMessageBuilder().
-		WithID(generateID(server.MsgPrefixFalse, nextID)).
-		WithNextID(nextID).
-		WithType(server.MessageTypeNew).
-		WithTopic(t).
-		WithBody(json.RawMessage(msg)).
-		WithTimestamp(time.Now().Unix()).
-		WithAck(false).
-		Build()
-
-	return q.qWrite(m)
+func (q *QConn) PublishMessageWithTTL(pubMsg server.PublishMessage, ttl int64) error {
+	msg := newPublishMessage(pubMsg.Topic, pubMsg.Body, ttl)
+	return q.qWrite(msg)
 }
 
-func (q *QConn) PublishJSON(t server.Topic, msg []byte) error {
-	nextID := generateNextID()
-
-	m := server.NewMessageBuilder().
-		WithID(generateID(server.MsgPrefixFalse, nextID)).
-		WithNextID(nextID).
-		WithType(server.MessageTypeNew).
-		WithTopic(t).
-		WithBody(msg).
-		WithTimestamp(time.Now().Unix()).
-		WithAck(false).
-		Build()
-
-	return q.qWrite(m)
+func (q *QConn) Publish(t server.Topic, body string) error {
+	return q.PublishWithTTL(t, body, 0)
 }
 
-func (q *QConn) PublishBinary(t server.Topic, msg []byte) error {
-	nextID := generateNextID()
+func (q *QConn) PublishWithTTL(t server.Topic, body string, ttl int64) error {
+	msg := newPublishMessage(t, json.RawMessage(body), ttl)
+	return q.qWrite(msg)
+}
 
-	m := server.NewMessageBuilder().
-		WithID(generateID(server.MsgPrefixFalse, nextID)).
-		WithNextID(nextID).
-		WithType(server.MessageTypeNew).
-		WithTopic(t).
-		WithBody(msg).
-		WithTimestamp(time.Now().Unix()).
-		WithAck(false).
-		Build()
+func (q *QConn) PublishJSON(t server.Topic, body []byte) error {
+	return q.PublishJSONWithTTL(t, body, 0)
+}
 
-	return q.writeMessageWithFormat(m, FormatBinary)
+func (q *QConn) PublishJSONWithTTL(t server.Topic, body []byte, ttl int64) error {
+	msg := newPublishMessage(t, body, ttl)
+	return q.qWrite(msg)
+}
+
+func (q *QConn) PublishBinary(t server.Topic, body []byte) error {
+	return q.PublishBinaryWithTTL(t, body, 0)
+}
+
+func (q *QConn) PublishBinaryWithTTL(t server.Topic, body []byte, ttl int64) error {
+	msg := newPublishMessage(t, body, ttl)
+	return q.writeMessageWithFormat(msg, FormatBinary)
 }
 
 // ConsumeJSON will be used for type-safety. Is a generic function.
@@ -313,17 +276,10 @@ func Consume(q *QConn, topic server.Topic) <-chan string {
 }
 
 func (q *QConn) subscribe(t server.Topic) error {
-	id := generateNextID()
-	m := server.NewMessageBuilder().
-		WithID(id).
-		WithNextID(id).
-		WithType(server.MessageTypeNewSubscriber).
-		WithTopic(t).
-		WithTimestamp(time.Now().UnixMilli()).
-		WithAck(false).
-		Build()
+	msg := newSimpleMessage(server.MessageTypeNewSubscriber, t)
+	msg.NextID = msg.ID // For subscription, ID and NextID are the same
 
-	return q.qWrite(m)
+	return q.qWrite(msg)
 }
 
 func (q *QConn) unsubscribe() error {
@@ -331,20 +287,12 @@ func (q *QConn) unsubscribe() error {
 }
 
 func (q *QConn) updateMessage(msg server.Message) {
-	m := server.NewMessageBuilder().
-		WithID(msg.ID).
-		WithNextID(msg.NextID).
-		WithUser(msg.User).
-		WithPassword(msg.Password).
-		WithTopic(msg.Topic).
-		WithBody(msg.Body).
-		WithTimestamp(msg.Timestamp).
-		WithAttempts(msg.Attempts).
-		WithType(server.MessageTypeACK).
-		WithAck(true).
-		Build()
+	// Create ACK message by copying received message and updating type/ack
+	ackMsg := msg
+	ackMsg.MType = server.MessageTypeACK
+	ackMsg.ACK = true
 
-	if err := q.writeMessage(m); err != nil {
+	if err := q.writeMessage(ackMsg); err != nil {
 		log.Printf("cannot send ACK confirmation, message id %s \n", msg.ID)
 	}
 }
@@ -388,6 +336,55 @@ func (q *QConn) writeMessageWithFormat(m server.Message, format MessageFormat) e
 	// Write payload
 	_, err = q.c.Write(payload)
 	return err
+}
+
+// MessageOptions holds optional parameters for message creation
+type MessageOptions struct {
+	TTL      int64  // Time to live in seconds (0 = no expiration)
+	User     string // For authentication messages
+	Password string // For authentication messages
+}
+
+// newMessage creates a new message with common fields set
+func newMessage(mType server.MType, topic server.Topic, body json.RawMessage, opts *MessageOptions) server.Message {
+	msg := server.Message{
+		MType:     mType,
+		Topic:     topic,
+		Body:      body,
+		Timestamp: time.Now().Unix(),
+		ACK:       false,
+		Attempts:  0,
+	}
+
+	// Set body string if body is provided
+	if body != nil {
+		msg.BodyString = string(body)
+	}
+
+	// Apply options if provided
+	if opts != nil {
+		msg.TTL = opts.TTL
+		msg.User = opts.User
+		msg.Password = opts.Password
+	}
+
+	return msg
+}
+
+// newPublishMessage creates a message for publishing (with ID generation)
+func newPublishMessage(topic server.Topic, body json.RawMessage, ttl int64) server.Message {
+	nextID := generateNextID()
+	msg := newMessage(server.MessageTypeNew, topic, body, &MessageOptions{TTL: ttl})
+	msg.ID = generateID(server.MsgPrefixFalse, nextID)
+	msg.NextID = nextID
+	return msg
+}
+
+// newSimpleMessage creates a message with just type and topic (no body)
+func newSimpleMessage(mType server.MType, topic server.Topic) server.Message {
+	msg := newMessage(mType, topic, nil, nil)
+	msg.ID = generateNextID()
+	return msg
 }
 
 func generateNextID() string {

@@ -2,12 +2,13 @@ package server
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"strings"
 
 	"github.com/dgraph-io/badger/v4"
 )
+
+const maxAttempts = 3
 
 type BadgerDB struct {
 	*badger.DB
@@ -59,13 +60,12 @@ func (b BadgerDB) saveMessage(message Message, format MessageFormat) error {
 func (b BadgerDB) updateMessageACK(message Message) error {
 	return b.DB.Update(func(txn *badger.Txn) error {
 		// delete entry with old key.
-		fmt.Println("deleting message")
 		if err := txn.Delete([]byte(message.ID)); err != nil {
 			log.Printf("cannot delete message with ID %s", message.ID)
+			return err
 		}
 
-		message.updateACK()
-		msgBytes, err := message.Marshall()
+		msgBytes, err := message.updateACK().Marshall()
 		if err != nil {
 			return err
 		}
@@ -78,8 +78,6 @@ func (b BadgerDB) updateMessageACK(message Message) error {
 		return nil
 	})
 }
-
-const maxAttempts = 3
 
 func (b BadgerDB) checkNotDeliveredMessages() ([]Message, error) {
 	var messages []Message
@@ -118,4 +116,10 @@ func (b BadgerDB) checkNotDeliveredMessages() ([]Message, error) {
 	}
 
 	return messages, nil
+}
+
+func (b BadgerDB) deleteExpired(message Message) error {
+	return b.DB.Update(func(txn *badger.Txn) error {
+		return txn.Delete([]byte(message.ID))
+	})
 }

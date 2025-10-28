@@ -76,15 +76,13 @@ func Test_Server(t *testing.T) {
 	id := uuid.NewString()
 	nextID := uuid.NewString()
 
-	__msg := NewMessageBuilder().
-		WithID("false-" + id).
-		WithNextID(nextID).
-		WithType(MessageTypeNew).
-		WithTopic(topic).
-		WithBody(bMsg).
-		WithTimestamp(time.Now().Unix()).
-		WithAck(false).
-		Build()
+	__msg := Message{}
+	__msg.ID = "false-" + id
+	__msg.NextID = nextID
+	__msg.MType = MessageTypeNew
+	__msg.Topic = topic
+	__msg.Body = bMsg
+	__msg.Timestamp = time.Now().Unix()
 
 	srv.save(__msg, FormatJSON)
 

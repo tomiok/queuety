@@ -37,8 +37,6 @@ type Server struct {
 
 	webServer    *http.Server
 	sentMessages map[Topic]*atomic.Int32
-
-	rateLimiter *RateLimiter
 }
 
 type Config struct {
@@ -50,10 +48,6 @@ type Config struct {
 	InMemoryData bool
 
 	WebServerPort string
-
-	RateLimitEnabled     bool
-	MaxMessagesPerSecond int
-	RateLimitQueueSize   int
 }
 
 type Auth struct {
@@ -86,15 +80,6 @@ func NewServer(c Config) (*Server, error) {
 		panic("invalid web server port")
 	}
 
-	var rateLimiter *RateLimiter
-	if c.RateLimitEnabled {
-		queueSize := c.RateLimitQueueSize
-		if queueSize == 0 {
-			queueSize = 1000
-		}
-		rateLimiter = NewRateLimiter(c.MaxMessagesPerSecond, queueSize)
-	}
-
 	return &Server{
 		protocol: c.Protocol,
 		port:     c.Port,
@@ -107,7 +92,6 @@ func NewServer(c Config) (*Server, error) {
 			Addr: c.WebServerPort,
 		},
 		sentMessages: make(map[Topic]*atomic.Int32),
-		rateLimiter:  rateLimiter,
 	}, nil
 }
 
@@ -126,10 +110,6 @@ func (s *Server) Start() error {
 		}
 	}()
 
-	if s.rateLimiter != nil {
-		go s.processRateLimitQueue()
-	}
-
 	for {
 		conn, errAccept := l.Accept()
 		if errAccept != nil {
@@ -143,9 +123,6 @@ func (s *Server) Start() error {
 }
 
 func (s *Server) Close() error {
-	if s.rateLimiter != nil {
-		s.rateLimiter.Stop()
-	}
 	return s.listener.Close()
 }
 
@@ -277,14 +254,33 @@ func (s *Server) handleMessage(conn net.Conn, buff []byte, format MessageFormat)
 
 func (s *Server) sendNewMessage(message Message) {
 	clients := s.clients[message.Topic]
-	if len(clients) == 0 {
-		log.Printf("Topic not found, actual name: %s, values in memory: %v \n", message.Topic.Name, s.clients)
+	if !s.isValidMessage(clients, message) {
 		return
 	}
 
 	format := clients[0].Format
-	s.sendMessage(message, format, message.Topic)
+	s.sendMessage(message, format, clients)
 }
+
+func (s *Server) isValidMessage(clients []Client, msg Message) bool {
+	if len(clients) == 0 {
+		log.Printf("[ERROR] topic not found, actual name: %s, values in memory: %v \n", msg.Topic.Name, clients)
+		return false
+	}
+
+	if msg.IsExpired() {
+		log.Printf("[ERROR] Message expired")
+		func() {
+			if err := s.DB.deleteExpired(msg); err != nil {
+				log.Printf("[ERROR] cannot delete expired message | messageID: %s\n", msg.ID)
+			}
+		}()
+		return false
+	}
+
+	return true
+}
+
 func (s *Server) doLogin(conn net.Conn, message Message) {
 	if !s.needAuth() {
 		message.MType = MessageAuthSuccess // no auth need means successful.
@@ -384,29 +380,7 @@ func saveUnsentMessage(msg Message, format MessageFormat, saveFn func(Message, M
 	saveFn(msg, format)
 }
 
-func (s *Server) sendMessage(message Message, format MessageFormat, topic Topic) {
-	if s.rateLimiter == nil {
-		s.sendMessageSync(message, format, topic)
-		return
-	}
-
-	if s.rateLimiter.Allow() {
-		go s.sendMessageSync(message, format, topic)
-		return
-	}
-
-	if !s.rateLimiter.Queue(message) {
-		log.Printf("rate limit queue full, dropping message for Topic %s", topic.Name)
-	}
-
-}
-
-func (s *Server) sendMessageSync(message Message, format MessageFormat, topic Topic) {
-	clients := s.clients[topic]
-	if len(clients) == 0 {
-		return
-	}
-
+func (s *Server) sendMessage(message Message, format MessageFormat, clients []Client) {
 	var payload []byte
 	var err error
 
@@ -417,7 +391,7 @@ func (s *Server) sendMessageSync(message Message, format MessageFormat, topic To
 	}
 
 	if err != nil {
-		log.Printf("cannot marshall message: %v\n", err)
+		log.Printf("[ERROR] cannot marshall message: %v\n", err)
 		return
 	}
 
@@ -452,10 +426,4 @@ func (s *Server) sendToClient(client Client, message Message, payload []byte) {
 	}
 
 	s.incSentMessages(message.Topic)
-}
-
-func (s *Server) processRateLimitQueue() {
-	s.rateLimiter.ProcessQueue(func(message Message) {
-		go s.sendMessageSync(message, FormatJSON, message.Topic)
-	})
 }

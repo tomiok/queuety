@@ -4,155 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"io"
-	"time"
 )
-
-type MType string
-
-const (
-	MessageTypeNewTopic      MType = "NEW_TOPIC"
-	MessageTypeNew           MType = "NEW_MESSAGE"
-	MessageTypeNewSubscriber MType = "NEW_SUB"
-	MessageTypeACK           MType = "ACK"
-	MessageTypeAuth          MType = "AUTH"
-	MessageAuthSuccess       MType = "AUTH_SUCCESS"
-	MessageAuthFailed        MType = "AUTH_FAILED"
-
-	MsgPrefixFalse = "false"
-)
-
-type Topic struct {
-	Name string
-}
-
-func NewTopic(name string) Topic {
-	return Topic{Name: name}
-}
-
-func (t Topic) IsEmpty() bool {
-	return t.Name == ""
-}
-
-type PublishMessage struct {
-	Topic Topic           `json:"Topic"`
-	Body  json.RawMessage `json:"Body"`
-}
-
-type Message struct {
-	ID         string
-	NextID     string
-	MType      MType
-	User       string
-	Password   string
-	Topic      Topic
-	Body       json.RawMessage
-	BodyString string
-	Timestamp  int64
-	ACK        bool
-	Attempts   int
-}
-
-func (m Message) IncAttempts() Message {
-	m.Attempts++
-	return m
-}
-
-func (m Message) updateACK() Message {
-	m.ID = m.NextID
-	m.ACK = true
-
-	return m
-}
-
-// MessageBuilder builder pattern
-type MessageBuilder struct {
-	msg Message
-}
-
-func NewMessageBuilder() *MessageBuilder {
-	return &MessageBuilder{
-		msg: Message{
-			Timestamp: time.Now().Unix(),
-			Attempts:  0,
-			ACK:       false,
-		},
-	}
-}
-
-func (m Message) Marshall() ([]byte, error) {
-	return json.Marshal(m)
-}
-
-func DecodeMessage(b []byte) (Message, error) {
-	r := bytes.NewReader(b)
-	var msg Message
-	if err := json.NewDecoder(r).Decode(&msg); err != nil {
-		return Message{}, err
-	}
-
-	return msg, nil
-}
-
-func (m Message) String() string {
-	return fmt.Sprintf("Message %s, %s, %s at %d", m.MType, m.Topic, m.Body, m.Timestamp)
-}
-
-func (mb *MessageBuilder) WithTopic(topic Topic) *MessageBuilder {
-	mb.msg.Topic = topic
-	return mb
-}
-
-func (mb *MessageBuilder) WithBody(body json.RawMessage) *MessageBuilder {
-	mb.msg.Body = body
-	mb.msg.BodyString = string(body)
-	return mb
-}
-
-func (mb *MessageBuilder) WithID(ID string) *MessageBuilder {
-	mb.msg.ID = ID
-	return mb
-}
-
-func (mb *MessageBuilder) WithNextID(nextID string) *MessageBuilder {
-	mb.msg.NextID = nextID
-	return mb
-}
-
-func (mb *MessageBuilder) WithType(mtype MType) *MessageBuilder {
-	mb.msg.MType = mtype
-	return mb
-}
-
-func (mb *MessageBuilder) WithUser(user string) *MessageBuilder {
-	mb.msg.User = user
-	return mb
-}
-
-func (mb *MessageBuilder) WithPassword(password string) *MessageBuilder {
-	mb.msg.Password = password
-	return mb
-}
-
-func (mb *MessageBuilder) WithAck(ack bool) *MessageBuilder {
-	mb.msg.ACK = ack
-	return mb
-}
-
-func (mb *MessageBuilder) WithAttempts(attempts int) *MessageBuilder {
-	mb.msg.Attempts = attempts
-	return mb
-}
-
-func (mb *MessageBuilder) WithTimestamp(ts int64) *MessageBuilder {
-	mb.msg.Timestamp = ts
-	return mb
-}
-
-func (mb *MessageBuilder) Build() Message {
-	return mb.msg
-}
 
 // MarshalBinary serializes Message to binary format
 func (m Message) MarshalBinary() ([]byte, error) {
@@ -239,6 +92,10 @@ func (m Message) MarshalBinary() ([]byte, error) {
 
 	// Write Attempts (4 bytes)
 	if err := binary.Write(buf, binary.LittleEndian, int32(m.Attempts)); err != nil {
+		return nil, err
+	}
+
+	if err := binary.Write(buf, binary.LittleEndian, m.TTL); err != nil {
 		return nil, err
 	}
 
